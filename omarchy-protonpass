@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 || $1 != doctor ]]; then
+  jq -cn '{
+    schemaVersion: 1,
+    command: "doctor",
+    state: "error",
+    message: "Invalid helper arguments"
+  }'
+  exit 2
+fi
+
+jq -cn '{
+  schemaVersion: 1,
+  command: "doctor",
+  state: "missing-deps",
+  message: "Helper scaffold; dependency checks are not implemented yet",
+  passCli: {present: false, version: ""},
+  wlClipboard: {present: false}
+}'

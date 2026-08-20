@@ -1,0 +1,20 @@
+{
+  "passCliVersion": "2.3.2",
+  "vaultListShape": "object.vaults[]",
+  "vaultEntryKeys": ["name", "share_id", "vault_id"],
+  "itemListShape": "object.items[]",
+  "itemEntryKeys": ["create_time", "flags", "id", "item_type", "modify_time", "share_id", "state", "title", "vault_id"],
+  "realShareIdLength": 88,
+  "realItemIdLength": 88,
+  "idsMatchAllowlist": true,
+  "fieldOutputEndsWithOneNewline": true,
+  "totpShape": "flattened-map",
+  "totpDigits": 6,
+  "serialIndexMilliseconds": 1104,
+  "parallelizeVaultCalls": false,
+  "selfUpdateCheckSkippedWhenStderrCaptured": true,
+  "selfUpdateCheckCanStallHelper": false,
+  "lockedSessionCaptured": true,
+  "networkDownCaptured": true,
+  "sessionSpecificRevocationCaptured": true
+}

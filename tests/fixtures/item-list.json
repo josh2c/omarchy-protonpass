@@ -1,0 +1,15 @@
+{
+  "items": [
+    {
+      "id": "item_fixture_1",
+      "share_id": "share_fixture_1",
+      "vault_id": "vault_fixture_1",
+      "state": "Active",
+      "flags": [],
+      "create_time": "2026-08-20T22:44:15",
+      "modify_time": "2026-08-20T22:44:15",
+      "title": "T0 Synthetic Login",
+      "item_type": "login"
+    }
+  ]
+}

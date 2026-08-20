@@ -1,0 +1,9 @@
+{
+  "vaults": [
+    {
+      "name": "Personal",
+      "vault_id": "vault_fixture_1",
+      "share_id": "share_fixture_1"
+    }
+  ]
+}

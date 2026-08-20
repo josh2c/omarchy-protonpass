@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "josh2c.protonpass",
+  "name": "Proton Pass",
+  "version": "1.0.0",
+  "author": "Josh Garcia",
+  "license": "MIT",
+  "description": "Quick-access search and copy for Proton Pass logins via the official pass-cli.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Panel.qml" },
+  "barWidget": {
+    "displayName": "Proton Pass",
+    "description": "Search Proton Pass logins; copy username, password, or TOTP.",
+    "category": "Security",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": { "clipboardClearSeconds": 45, "pasteOnce": false, "excludeVaults": "" },
+    "schema": [
+      { "key": "clipboardClearSeconds", "type": "integer", "label": "Clear clipboard after (seconds)",
+        "description": "0 disables automatic clearing.", "defaultValue": 45, "min": 0, "max": 300, "step": 5 },
+      { "key": "pasteOnce", "type": "boolean", "label": "Paste once",
+        "description": "Clipboard offers the value a single time. Some apps (Electron, browsers) read the clipboard more than once per paste and will fail.", "defaultValue": false },
+      { "key": "excludeVaults", "type": "string", "label": "Excluded vaults",
+        "description": "Comma-separated vault names to hide from search.", "defaultValue": "" }
+    ]
+  }
+}

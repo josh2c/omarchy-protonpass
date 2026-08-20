@@ -1,0 +1,7 @@
+Error: Error listing vaults
+
+Caused by:
+    0: Error listing shares
+    1: Error sending request
+    2: failed to connect to host: error while connecting to destination: network is unreachable
+    3: error while connecting to destination: network is unreachable

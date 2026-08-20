@@ -1,0 +1,6 @@
+Session is locked. Please unlock your session and try again.
+Error: Error listing vaults
+
+Caused by:
+    0: Error listing shares
+    1: Could not perform operation. Reason: SessionLocked

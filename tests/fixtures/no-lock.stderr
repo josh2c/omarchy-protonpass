@@ -1,0 +1,1 @@
+Error: Session has no lock. Create one first with `pass-cli session create-lock`

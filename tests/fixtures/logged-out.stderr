@@ -1,0 +1,2 @@
+2026-08-20T22:13:15.591806Z ERROR pass-cli/src/main.rs:332: Command is not logout there is no session
+Error: This operation requires an authenticated client

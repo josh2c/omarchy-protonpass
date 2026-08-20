@@ -1,0 +1,7 @@
+Error: Error listing vaults
+
+Caused by:
+    0: Error listing shares
+    1: Error sending request
+    2: failed to authenticate: non-existent session
+    3: non-existent session
