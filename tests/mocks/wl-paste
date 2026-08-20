@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n ${MOCK_WL_PASTE_LOG:-} ]]; then
+  jq -cn --args '$ARGS.positional' -- "$@" >>"$MOCK_WL_PASTE_LOG"
+fi
+
+printf '%s' "${MOCK_WL_PASTE_VALUE:-}"
+exit "${MOCK_WL_PASTE_EXIT:-0}"

@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mock_self=$(readlink -f "${BASH_SOURCE[0]}")
+MOCK_ROOT=$(cd "$(dirname "$mock_self")/.." && pwd)
+FIXTURES=${MOCK_FIXTURES_DIR:-"$MOCK_ROOT/fixtures"}
+scenario=${MOCK_SCENARIO:-ready}
+
+record_call() {
+  [[ -n ${MOCK_CALLS_LOG:-} ]] || return 0
+  jq -cn --args '$ARGS.positional' -- "$@" >>"$MOCK_CALLS_LOG"
+}
+
+fixture_exit() {
+  local name=$1
+  local exit_code
+  exit_code=$(<"$FIXTURES/$name.exit")
+  cat "$FIXTURES/$name.stderr" >&2
+  exit "$exit_code"
+}
+
+arg_value() {
+  local wanted=$1
+  shift
+  while (( $# > 0 )); do
+    if [[ $1 == "$wanted" && $# -gt 1 ]]; then
+      printf '%s' "$2"
+      return 0
+    fi
+    shift
+  done
+  return 1
+}
+
+emit_ready_vaults() {
+  cat "$FIXTURES/vault-list.json"
+}
+
+emit_multivault_vaults() {
+  jq -cn '{vaults:[
+    {name:"Personal",vault_id:"vault_fixture_1",share_id:"share_fixture_1"},
+    {name:"Work",vault_id:"vault_fixture_2",share_id:"share_fixture_2"}
+  ]}'
+}
+
+emit_ready_items() {
+  cat "$FIXTURES/item-list.json"
+}
+
+emit_multivault_items() {
+  local share_id=$1
+  case "$share_id" in
+    share_fixture_1) emit_ready_items ;;
+    share_fixture_2)
+      jq -cn '{items:[
+        {id:"item_work_1",share_id:"share_fixture_2",vault_id:"vault_fixture_2",state:"Active",flags:[],create_time:"2026-08-20T22:45:00",modify_time:"2026-08-20T22:45:00",title:"Work Login",item_type:"login"}
+      ]}'
+      ;;
+    *) jq -cn '{items:[]}' ;;
+  esac
+}
+
+emit_unicode_items() {
+  cat <<'JSON'
+{"items":[
+  {"id":"item_quote","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:45:01","modify_time":"2026-08-20T22:45:01","title":"Quote \"login\"","item_type":"login"},
+  {"id":"item_newline","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:45:02","modify_time":"2026-08-20T22:45:02","title":"Line\nbreak","item_type":"login"},
+  {"id":"item_emoji","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:45:03","modify_time":"2026-08-20T22:45:03","title":"Emoji 🔐","item_type":"login"},
+  {"id":"item_rtl","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:45:04","modify_time":"2026-08-20T22:45:04","title":"RTL مثال","item_type":"login"},
+  {"id":"item_shell","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:45:05","modify_time":"2026-08-20T22:45:05","title":"Shell $(touch /tmp/never-run); `id` & | < >","item_type":"login"}
+]}
+JSON
+}
+
+record_call "$@"
+
+if [[ $# -eq 1 && $1 == --version ]]; then
+  printf 'Proton Pass CLI 2.3.2 (mock)\n'
+  exit 0
+fi
+
+case "$scenario" in
+  logged-out) fixture_exit logged-out ;;
+  locked) fixture_exit locked ;;
+  expired) fixture_exit invalidated ;;
+  offline) fixture_exit network-down ;;
+  timeout-sleeps)
+    sleep "${MOCK_SLEEP_SECONDS:-30}"
+    ;;
+esac
+
+if [[ $scenario == malformed-json ]]; then
+  printf '{not valid json\n'
+  exit 0
+fi
+
+if [[ ${1:-} == vault && ${2:-} == list ]]; then
+  case "$scenario" in
+    ready-multivault|empty-vault) emit_multivault_vaults ;;
+    zero-vaults) jq -cn '{vaults:[]}' ;;
+    *) emit_ready_vaults ;;
+  esac
+  exit 0
+fi
+
+if [[ ${1:-} == item && ${2:-} == list ]]; then
+  share_id=$(arg_value --share-id "$@") || share_id=""
+  if [[ -n ${MOCK_FAIL_SHARE_ID:-} && $share_id == "$MOCK_FAIL_SHARE_ID" ]]; then
+    printf 'Error: Synthetic per-vault failure\n' >&2
+    exit 1
+  fi
+  case "$scenario" in
+    ready-multivault) emit_multivault_items "$share_id" ;;
+    empty-vault)
+      if [[ $share_id == share_fixture_2 ]]; then jq -cn '{items:[]}'
+      else emit_ready_items
+      fi
+      ;;
+    zero-vaults) jq -cn '{items:[]}' ;;
+    unicode-titles) emit_unicode_items ;;
+    *) emit_ready_items ;;
+  esac
+  exit 0
+fi
+
+if [[ ${1:-} == item && ${2:-} == view ]]; then
+  field=$(arg_value --field "$@") || field=""
+  item_id=$(arg_value --item-id "$@") || item_id=""
+  if [[ $scenario == no-username && ( $field == username || $field == email ) ]]; then
+    fixture_exit "no-$field"
+  fi
+  if [[ $scenario == value-with-trailing-newlines ]]; then
+    cat "$FIXTURES/field-output-newline.txt"
+    printf '\n\n'
+    exit 0
+  fi
+  case "$field" in
+    username)
+      [[ $item_id != item_email_1 ]] || fixture_exit no-username
+      cat "$FIXTURES/field-output-newline.txt"
+      ;;
+    email)
+      [[ $item_id == item_email_1 ]] || fixture_exit no-email
+      cat "$FIXTURES/field-output-newline.txt"
+      ;;
+    password) cat "$FIXTURES/field-output-newline.txt" ;;
+    *)
+      printf 'Error: Field does not exist: %s\n' "$field" >&2
+      exit 1
+      ;;
+  esac
+  exit 0
+fi
+
+if [[ ${1:-} == item && ${2:-} == totp ]]; then
+  if [[ $scenario == no-totp ]]; then fixture_exit no-totp; fi
+  cat "$FIXTURES/item-totp.json"
+  exit 0
+fi
+
+if [[ ${1:-} == session && ${2:-} == lock ]]; then
+  if [[ $scenario == no-lock ]]; then fixture_exit no-lock; fi
+  printf 'Session locked successfully\n'
+  exit 0
+fi
+
+printf 'mock pass-cli: unsupported arguments\n' >&2
+exit 64

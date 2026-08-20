@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+TEST_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+
+fail() {
+  printf 'FAIL: %s\n' "$*" >&2
+  exit 1
+}
+
+assert_eq() {
+  local expected=$1 actual=$2 message=$3
+  [[ $actual == "$expected" ]] || fail "$message (expected '$expected', got '$actual')"
+}
+
+assert_jq() {
+  local expression=$1 json=$2 message=$3
+  jq -e "$expression" <<<"$json" >/dev/null || fail "$message"
+}
+
+assert_file_eq() {
+  local expected=$1 actual=$2 message=$3
+  cmp "$expected" "$actual" || fail "$message"
+}
+
+assert_file_contains() {
+  local file=$1 text=$2 message=$3
+  rg -F --quiet -- "$text" "$file" || fail "$message"
+}
+
+make_test_sandbox() {
+  TEST_SANDBOX=$(mktemp -d /tmp/omarchy-protonpass-tests.XXXXXX)
+  TEST_BIN="$TEST_SANDBOX/bin"
+  mkdir -p "$TEST_BIN"
+
+  ln -s "$TEST_ROOT/tests/mocks/pass-cli" "$TEST_BIN/pass-cli"
+  ln -s "$TEST_ROOT/tests/mocks/wl-copy" "$TEST_BIN/wl-copy"
+  ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
+
+  local utility utility_path
+  for utility in bash cat cmp cut dirname jq mkdir mktemp readlink rg rm sha256sum sleep tail timeout; do
+    utility_path=$(command -v "$utility") || fail "required test utility is missing: $utility"
+    ln -s "$utility_path" "$TEST_BIN/$utility"
+  done
+
+  MOCK_CALLS_LOG="$TEST_SANDBOX/pass-cli-calls.jsonl"
+  MOCK_WL_COPY_LOG="$TEST_SANDBOX/wl-copy-calls.jsonl"
+  MOCK_WL_PASTE_LOG="$TEST_SANDBOX/wl-paste-calls.jsonl"
+  MOCK_FIXTURES_DIR="$TEST_ROOT/tests/fixtures"
+  : >"$MOCK_CALLS_LOG"
+  : >"$MOCK_WL_COPY_LOG"
+  : >"$MOCK_WL_PASTE_LOG"
+
+  export TEST_SANDBOX TEST_BIN MOCK_CALLS_LOG MOCK_WL_COPY_LOG MOCK_WL_PASTE_LOG MOCK_FIXTURES_DIR
+  export PATH="$TEST_BIN"
+}
+
+cleanup_test_sandbox() {
+  if [[ -n ${TEST_SANDBOX:-} && -d $TEST_SANDBOX ]]; then
+    rm -rf -- "$TEST_SANDBOX"
+  fi
+}

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ ${MOCK_WL_COPY_SLEEP_SECONDS:-0} != 0 ]]; then
+  sleep "$MOCK_WL_COPY_SLEEP_SECONDS"
+fi
+
+hash=$(sha256sum | cut -d' ' -f1)
+
+if [[ -n ${MOCK_WL_COPY_LOG:-} ]]; then
+  jq -cn --arg sha256 "$hash" --args \
+    '$ARGS.positional as $args | {args:$args,sha256:$sha256}' -- "$@" \
+    >>"$MOCK_WL_COPY_LOG"
+fi
