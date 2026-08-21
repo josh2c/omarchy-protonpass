@@ -234,6 +234,26 @@ runner_version=$(
 )
 assert_eq "Proton Pass CLI 2.3.2 (mock)" "$runner_version" "pass-cli wrapper environment"
 
+for capture_run in {1..25}; do
+  capture_stdout=""
+  capture_stderr=""
+  capture_status=0
+  run_pass_cli_captured capture_stdout capture_stderr capture_status 1 --version
+  assert_eq "0" "$capture_status" "captured runner stress status $capture_run"
+  assert_eq "Proton Pass CLI 2.3.2 (mock)" "$capture_stdout" \
+    "captured runner stress stdout $capture_run"
+  assert_eq "" "$capture_stderr" "captured runner stress stderr $capture_run"
+
+  capture_value=""
+  capture_secret_stderr=""
+  capture_secret_status=0
+  run_pass_cli_secret_captured capture_value capture_secret_stderr capture_secret_status 1 \
+    item view --share-id share_fixture_1 --item-id item_fixture_1 --field password
+  assert_eq "0" "$capture_secret_status" "secret runner stress status $capture_run"
+  assert_eq "synthetic-value" "$capture_value" "secret runner stress value $capture_run"
+  assert_eq "" "$capture_secret_stderr" "secret runner stress stderr $capture_run"
+done
+
 set +e
 MOCK_SCENARIO=timeout-sleeps MOCK_SLEEP_SECONDS=1 run_pass_cli 0.02 vault list --output json >/dev/null 2>&1
 runner_timeout_status=$?

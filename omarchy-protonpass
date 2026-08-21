@@ -141,11 +141,12 @@ run_pass_cli() {
 run_pass_cli_captured() {
   local stdout_name=$1 stderr_name=$2 status_name=$3 timeout_seconds=$4
   shift 4
-  local stderr_read stderr_write stderr_pid capture_write
+  local stderr_read stable_read stderr_write stderr_pid capture_write
   local -n captured_stdout=$stdout_name captured_stderr=$stderr_name captured_status=$status_name
 
   coproc STDERR_PIPE { cat; }
   stderr_read=${STDERR_PIPE[0]}
+  exec {stable_read}<&"$stderr_read"
   stderr_write=${STDERR_PIPE[1]}
   stderr_pid=$STDERR_PIPE_PID
   exec {capture_write}>&"$stderr_write"
@@ -158,8 +159,8 @@ run_pass_cli_captured() {
   fi
 
   exec {capture_write}>&-
-  captured_stderr=$(cat <&"$stderr_read")
-  exec {stderr_read}>&-
+  captured_stderr=$(cat <&"$stable_read")
+  exec {stable_read}>&-
   wait "$stderr_pid"
 }
 
@@ -168,11 +169,12 @@ run_pass_cli_captured() {
 run_pass_cli_secret_captured() {
   local value_name=$1 stderr_name=$2 status_name=$3 timeout_seconds=$4
   shift 4
-  local stderr_read stderr_write stderr_pid capture_write
+  local stderr_read stable_read stderr_write stderr_pid capture_write
   local -n captured_value=$value_name captured_stderr=$stderr_name captured_status=$status_name
 
   coproc SECRET_STDERR_PIPE { cat; }
   stderr_read=${SECRET_STDERR_PIPE[0]}
+  exec {stable_read}<&"$stderr_read"
   stderr_write=${SECRET_STDERR_PIPE[1]}
   stderr_pid=$SECRET_STDERR_PIPE_PID
   exec {capture_write}>&"$stderr_write"
@@ -190,8 +192,8 @@ run_pass_cli_secret_captured() {
   fi
 
   exec {capture_write}>&-
-  captured_stderr=$(cat <&"$stderr_read")
-  exec {stderr_read}>&-
+  captured_stderr=$(cat <&"$stable_read")
+  exec {stable_read}>&-
   wait "$stderr_pid"
 
   captured_value=${captured_value%x}
