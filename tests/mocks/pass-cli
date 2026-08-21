@@ -139,6 +139,10 @@ fi
 if [[ ${1:-} == item && ${2:-} == view ]]; then
   field=$(arg_value --field "$@") || field=""
   item_id=$(arg_value --item-id "$@") || item_id=""
+  if [[ $scenario == security-marker ]]; then
+    printf 'OMPP-T7-MARKER-7f43d2a9\n'
+    exit 0
+  fi
   if [[ -n ${MOCK_EMPTY_FIELD:-} && $field == "$MOCK_EMPTY_FIELD" ]]; then
     printf '\n'
     exit 0
