@@ -37,6 +37,8 @@ assert_contains 'vaultName: response.items[i].vaultName' \
   "the retained model does not include vaultName"
 assert_contains 'title: response.items[i].title' \
   "the retained model does not include title"
+assert_contains 'createTime: response.items[i].createTime' \
+  "the retained model does not include createTime"
 assert_contains 'property int _indexGeneration: 0' \
   "index generations are not tracked"
 assert_contains 'if (responseGeneration !== root._indexGeneration)' \
@@ -141,8 +143,24 @@ assert_panel_contains 'text: loginRow.modelData.title' \
   "login titles are not rendered"
 assert_panel_contains 'text: loginRow.modelData.vaultName' \
   "vault names are not rendered"
-[[ $(grep -A1 -E 'text: loginRow\.modelData\.(title|vaultName)' "$ROOT/Panel.qml" | grep -c 'textFormat: Text.PlainText') -eq 2 ]] || \
+[[ $(grep -A1 -E 'text: loginRow\.modelData\.(title|vaultName|subtitle)' "$ROOT/Panel.qml" | grep -c 'textFormat: Text.PlainText') -eq 3 ]] || \
   fail "every user-data render must use Text.PlainText"
+assert_contains 'recentTs: recent.ts' \
+  "recent timestamps are not joined to index metadata in memory"
+assert_contains 'qsTr("used %L1 minutes ago").arg(amount)' \
+  "relative used times are not translatable with locale-formatted numbers"
+assert_contains 'created.toLocaleDateString(Qt.locale(), Locale.ShortFormat)' \
+  "created dates are not formatted with the active locale"
+assert_contains 'onItemsChanged: refreshSubtitleNow()' \
+  "subtitle time is not refreshed when the index model changes"
+assert_contains 'onRecentsChanged: refreshSubtitleNow()' \
+  "subtitle time is not refreshed when recents change"
+assert_contains $'panelOpen = true;\n        refreshSubtitleNow();' \
+  "subtitle time is not refreshed when the panel opens"
+[[ $(grep -c 'interval: 1000' "$ROOT/Service.qml") -eq 1 ]] || \
+  fail "subtitle support added a per-second timer"
+assert_panel_contains 'text: loginRow.modelData.subtitle' \
+  "row subtitles are not rendered"
 for state in MISSING_DEPS LOGGED_OUT LOCKED UNREACHABLE ERROR READY LOADING; do
   [[ $PANEL_SOURCE == *"\"$state\""* ]] || fail "Panel.qml is missing the $state view"
 done

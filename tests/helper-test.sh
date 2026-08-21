@@ -180,7 +180,7 @@ assert_invalid_helper copy copy --share-id '$(touch /tmp/helper-never-run)' --it
 [[ ! -e /tmp/helper-never-run ]] || fail "invalid helper argument was executed"
 
 index_ready=$(MOCK_SCENARIO=ready "$HELPER" index --exclude-vaults '')
-assert_jq '.schemaVersion == 1 and .command == "index" and .state == "ready" and (.message|type) == "string" and .items == [{itemId:"item_fixture_1",shareId:"share_fixture_1",vaultName:"Personal",title:"T0 Synthetic Login"}] and .warnings == []' "$index_ready" "index ready contract"
+assert_jq '.schemaVersion == 1 and .command == "index" and .state == "ready" and (.message|type) == "string" and .items == [{itemId:"item_fixture_1",shareId:"share_fixture_1",vaultName:"Personal",title:"T0 Synthetic Login",createTime:"2026-08-20T22:44:15"}] and .warnings == []' "$index_ready" "index ready contract"
 copy_contract=$("$HELPER" copy --clear-seconds 0000 --field totp --item-id item_1 --share-id share/1= --paste-once)
 assert_jq '.schemaVersion == 1 and .command == "copy" and .state == "copied" and .field == "totp" and .fallbackUsed == false and .clearSeconds == 0' "$copy_contract" "copy contract"
 lock_stub=$("$HELPER" lock)

@@ -24,6 +24,7 @@ Item {
     property bool logoutBusy: false
     property bool staleWarning: false
     property bool panelOpen: false
+    property double subtitleNow: Date.now()
     readonly property var filteredItems: filterItems(items, query)
     readonly property bool showRecents: boolSetting("showRecents", true)
     readonly property var recentItems: joinRecents(items, recents)
@@ -97,12 +98,70 @@ Item {
             var recent = recentMetadata[i];
             for (var j = 0; j < source.length; j++) {
                 if (source[j].shareId === recent.shareId && source[j].itemId === recent.itemId) {
-                    joined.push(source[j]);
+                    joined.push({
+                        itemId: source[j].itemId,
+                        shareId: source[j].shareId,
+                        vaultName: source[j].vaultName,
+                        title: source[j].title,
+                        createTime: source[j].createTime,
+                        recentTs: recent.ts
+                    });
                     break;
                 }
             }
         }
         return joined;
+    }
+
+    function recentTimestamp(item) {
+        if (!showRecents || !Array.isArray(recents))
+            return null;
+        for (var i = 0; i < recents.length; i++) {
+            if (recents[i].shareId === item.shareId && recents[i].itemId === item.itemId)
+                return recents[i].ts;
+        }
+        return null;
+    }
+
+    function relativeUsedText(timestamp) {
+        var elapsedSeconds = Math.max(0, Math.floor((subtitleNow - timestamp * 1000) / 1000));
+        var amount = Math.max(1, Math.floor(elapsedSeconds / 60));
+        var unit = "minute";
+        if (elapsedSeconds >= 31536000) {
+            amount = Math.floor(elapsedSeconds / 31536000);
+            unit = "year";
+        } else if (elapsedSeconds >= 2592000) {
+            amount = Math.floor(elapsedSeconds / 2592000);
+            unit = "month";
+        } else if (elapsedSeconds >= 86400) {
+            amount = Math.floor(elapsedSeconds / 86400);
+            unit = "day";
+        } else if (elapsedSeconds >= 3600) {
+            amount = Math.floor(elapsedSeconds / 3600);
+            unit = "hour";
+        }
+
+        if (unit === "year")
+            return amount === 1 ? qsTr("used 1 year ago") : qsTr("used %L1 years ago").arg(amount);
+        if (unit === "month")
+            return amount === 1 ? qsTr("used 1 month ago") : qsTr("used %L1 months ago").arg(amount);
+        if (unit === "day")
+            return amount === 1 ? qsTr("used 1 day ago") : qsTr("used %L1 days ago").arg(amount);
+        if (unit === "hour")
+            return amount === 1 ? qsTr("used 1 hour ago") : qsTr("used %L1 hours ago").arg(amount);
+        return amount === 1 ? qsTr("used 1 minute ago") : qsTr("used %L1 minutes ago").arg(amount);
+    }
+
+    function subtitleFor(item) {
+        var timestamp = item.recentTs !== undefined ? item.recentTs : recentTimestamp(item);
+        if (timestamp !== null)
+            return relativeUsedText(timestamp);
+        var created = new Date(item.createTime);
+        return qsTr("created %1").arg(created.toLocaleDateString(Qt.locale(), Locale.ShortFormat));
+    }
+
+    function refreshSubtitleNow() {
+        subtitleNow = Date.now();
     }
 
     function displayRows(source, offset) {
@@ -113,6 +172,8 @@ Item {
                 shareId: source[i].shareId,
                 vaultName: source[i].vaultName,
                 title: source[i].title,
+                createTime: source[i].createTime,
+                subtitle: subtitleFor(source[i]),
                 cursorIndex: offset + i
             });
         }
@@ -183,7 +244,9 @@ Item {
                         || typeof item.itemId !== "string"
                         || typeof item.shareId !== "string"
                         || typeof item.vaultName !== "string"
-                        || typeof item.title !== "string")
+                        || typeof item.title !== "string"
+                        || typeof item.createTime !== "string"
+                        || !isFinite(Date.parse(item.createTime)))
                     return null;
             }
         } else if (expectedCommand === "copy") {
@@ -316,6 +379,7 @@ Item {
         if (panelOpen)
             return;
         panelOpen = true;
+        refreshSubtitleNow();
         if (showRecents)
             runRecents("load");
 
@@ -452,6 +516,9 @@ Item {
 
     visible: false
 
+    onItemsChanged: refreshSubtitleNow()
+    onRecentsChanged: refreshSubtitleNow()
+
     Timer {
         id: clipboardCountdownTimer
         interval: 1000
@@ -529,7 +596,8 @@ Item {
                         itemId: response.items[i].itemId,
                         shareId: response.items[i].shareId,
                         vaultName: response.items[i].vaultName,
-                        title: response.items[i].title
+                        title: response.items[i].title,
+                        createTime: response.items[i].createTime
                     });
                 }
                 root.items = cleanItems;
