@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Keybinds.js" as Keybinds
 
 Panel {
   id: root
@@ -17,6 +18,11 @@ Panel {
   property int cursorIndex: 0
   property string toastText: ""
   property string setupClipboardText: ""
+
+  readonly property var keybindConfiguration: Keybinds.parse(
+    String(svc.setting("keybinds", "")),
+    function(entry) { console.warn("omarchy-protonpass: invalid keybind entry: " + entry) })
+  readonly property var effectiveKeybinds: keybindConfiguration.bindings
 
   readonly property var selectedItem: {
     var rows = svc.filteredItems
@@ -66,6 +72,58 @@ Panel {
   function copySelected(field) {
     if (!selectedItem || svc.copyBusy) return
     svc.copy(selectedItem.shareId, selectedItem.itemId, field)
+  }
+
+  function shortcutLabel(action) {
+    return Keybinds.display(keybindConfiguration.preferred[String(action || "")] || "")
+  }
+
+  function chordForEvent(event) {
+    var allowedModifiers = Qt.ControlModifier | Qt.ShiftModifier | Qt.AltModifier
+    if ((event.modifiers & ~allowedModifiers) !== 0)
+      return ""
+
+    var keyName = ""
+    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+      keyName = "enter"
+    else if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F9)
+      keyName = "f" + String(event.key - Qt.Key_F1 + 1)
+    else if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z)
+      keyName = String.fromCharCode("a".charCodeAt(0) + event.key - Qt.Key_A)
+    if (keyName === "")
+      return ""
+
+    var parts = []
+    if (event.modifiers & Qt.ControlModifier) parts.push("ctrl")
+    if (event.modifiers & Qt.ShiftModifier) parts.push("shift")
+    if (event.modifiers & Qt.AltModifier) parts.push("alt")
+    parts.push(keyName)
+    return parts.join("+")
+  }
+
+  function triggerAction(action) {
+    switch (action) {
+    case "copy-username": root.copySelected("username"); break
+    case "copy-password": root.copySelected("password"); break
+    case "copy-totp": root.copySelected("totp"); break
+    case "refresh": svc.refresh(); break
+    case "lock": svc.lock(); break
+    case "clear-clipboard":
+      if (typeof svc.clearClipboard === "function") svc.clearClipboard()
+      break
+    case "logout":
+      if (typeof root.requestLogout === "function") root.requestLogout()
+      break
+    }
+  }
+
+  function handleChord(event) {
+    var action = effectiveKeybinds[chordForEvent(event)]
+    if (action === undefined)
+      return false
+    triggerAction(action)
+    event.accepted = true
+    return true
   }
 
   function refocusSearch(text) {
@@ -184,6 +242,7 @@ Panel {
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function(event) {
         if (keyCatcher.blocked) return
+        if (root.handleChord(event)) return
         if (event.key === Qt.Key_Escape) {
           root.layeredEscape(); event.accepted = true; return
         }
@@ -295,6 +354,7 @@ Panel {
 
             Keys.priority: Keys.BeforeItem
             Keys.onPressed: function(event) {
+              if (root.handleChord(event)) return
               if (event.key === Qt.Key_Escape) {
                 root.layeredEscape(); event.accepted = true; return
               }

@@ -5,6 +5,12 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SERVICE_SOURCE=$(<"$ROOT/Service.qml")
 PANEL_SOURCE=$(<"$ROOT/Panel.qml")
 
+command -v node >/dev/null || {
+  printf 'FAIL: node is required for keybind parser assertions\n' >&2
+  exit 1
+}
+node "$ROOT/tests/keybinds-test.js" "$ROOT/Keybinds.js"
+
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 assert_contains() {
   [[ $SERVICE_SOURCE == *"$1"* ]] || fail "$2"
@@ -98,6 +104,18 @@ assert_panel_contains 'root.refocusSearch(event.text)' \
   "printable list keys do not refocus search"
 assert_panel_contains 'root.refocusSearch("")' \
   "slash does not refocus search without insertion"
+assert_panel_contains 'readonly property var effectiveKeybinds: keybindConfiguration.bindings' \
+  "the effective keybind table is not exposed to the panel"
+assert_panel_contains 'if (root.handleChord(event)) return' \
+  "modifier chords are not intercepted before normal key handling"
+[[ $(grep -c 'if (root.handleChord(event)) return' "$ROOT/Panel.qml") -eq 2 ]] || \
+  fail "both search and list focus must handle effective chords"
+assert_panel_contains 'if (typeof root.requestLogout === "function") root.requestLogout()' \
+  "the logout chord bypasses the two-step confirmation seam"
+assert_panel_contains 'if (typeof svc.clearClipboard === "function") svc.clearClipboard()' \
+  "the clear-clipboard chord is not routed to the helper-backed service seam"
+[[ $PANEL_SOURCE != *'case "logout": svc.logout()'* ]] || \
+  fail "a keybinding can invoke destructive logout without confirmation"
 assert_panel_contains 'if (search.text !== "")' \
   "Escape does not clear search before closing"
 assert_panel_contains '["omarchy", "launch", "terminal", "pass-cli", "login"]' \
@@ -125,6 +143,10 @@ assert_panel_contains 'active: root.needsAttention' \
   "the bar icon does not map user-action states to urgent tint"
 assert_panel_contains 'stdinEnabled: true' \
   "setup commands are not copied over stdin"
+jq -e '
+  .barWidget.defaults.keybinds == "" and
+  ([.barWidget.schema[] | select(.key == "keybinds" and .type == "string" and .defaultValue == "")] | length) == 1
+' "$ROOT/manifest.json" >/dev/null || fail "the keybinds setting schema is missing"
 [[ $PANEL_SOURCE != *'--show-secrets'* ]] || fail "Panel.qml enables secret display"
 [[ $PANEL_SOURCE != *'property string password'* ]] || fail "Panel.qml can retain a password"
 

@@ -1,6 +1,6 @@
 # omarchy-protonpass — v1 Implementation Plan
 
-Status: v1.0 **shipped through T11**; v1.1 refinements addendum (rev 3.0) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
+Status: v1.0 **shipped through T11**; v1.1 refinements addendum (rev 3.1) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
 
 All product, architecture, security, and scope decisions are resolved. Facts verified against a live Omarchy 4.x install (`/usr/share/omarchy/shell`, `/usr/bin/omarchy-plugin-validate`), a clone of `robzolkos/omarchy-github`, and the `protonpass/pass-cli` Rust source (v2.3.2, 2026-08). The §2.2 manifest passes `omarchy-plugin-validate` verbatim (tested). `salemsayed/omwarden` does not exist and is not a reference.
 
@@ -372,7 +372,7 @@ Each task lands with its tests in one PR. ∥ = parallelizable once deps met.
 
 ---
 
-# v1.1 Refinements Addendum (rev 3.0)
+# v1.1 Refinements Addendum (rev 3.1)
 
 Scope decided after v1.0 field use, a prior-art survey (rofi-pass, rofi-rbw, KeePassXC, 1Password Quick Access, Bitwarden, krunner/ulauncher/Walker plugins), and a review of `salemsayed/omawarden` (the Bitwarden Omarchy plugin; note: the v1 brief's `omwarden` URL was a typo — the repo exists as `omawarden`). All v1.0 security rules stand unchanged and non-negotiable.
 
@@ -381,6 +381,7 @@ Scope decided after v1.0 field use, a prior-art survey (rofi-pass, rofi-rbw, Kee
 **In (core, locked):**
 1. **Modifier chords, active even while typing in search**: `Ctrl+U` copy username · `Ctrl+P` copy password · `Ctrl+T` copy TOTP (of the highlighted item) · `Ctrl+R` refresh · `Ctrl+L` lock · `Ctrl+Shift+X` clear clipboard now. `Enter` = copy password, `Shift+Enter` = copy username. Existing plain `u/p/t/L/r` in list focus retained. Rationale: direct mnemonics match our list-focus letters and omawarden's local convention; modifier chords never collide with text entry (rofi-rbw/1Password-proven).
 2. **Self-teaching UI**: footer legend showing the live chords (reflecting any remaps); the highlighted row's action buttons show their shortcut labels.
+   **(rev 3.1)** Row actions are **icon buttons**, not letter buttons (OmaWarden-style): Nerd Font glyphs — person for username, key for password, clock for TOTP — sized to the bar's icon conventions. Guardrails (icon-only buttons are an accessibility trap): each button carries an accessible name ("Copy username" / "Copy password" / "Copy TOTP code"), a hover tooltip naming action + shortcut, and the highlighted row still shows the shortcut label beside the icons; the footer legend remains the always-visible text reference. Letters u/p/t stay as list-focus shortcuts — only their button *rendering* changes.
 3. **Clipboard countdown + clear-now**: after a copy, the footer shows text-first "Clears in Ns" with a thin progress bar (KeePassXC pattern; text satisfies reduced-motion); clicking it or `Ctrl+Shift+X` clears immediately — hash-verified, never clearing newer content. Countdown hides on expiry/clear.
 4. **Logout**: action beside Lock; **two-step arm/confirm** (button arms to "Confirm log out" for 4 s, then disarms — omarchy-github destructive-action pattern). Runs `pass-cli logout` via the helper; success → LOGGED_OUT, model dropped.
 5. **Header status line** (omawarden-inspired): "N logins · synced Xm ago"; during filtering, a match-count badge. Times computed client-side from the last successful index.
@@ -411,7 +412,7 @@ New helper commands, same envelope (`command` enum grows accordingly):
 - **T16 — QML: countdown, clear-now, header status, shortcut labels** (deps T14, T15). Countdown driven by the copy response's `clearSeconds`, client-side timer; clear-now button/chord calls helper `clear-now`; hides on `cleared`/`not-owner`/expiry. Header string + match badge.
 - **T17 — QML: recents section** (deps T14). Empty-query view = Recent + All sections; join by ids; respects `showRecents`; disabling triggers store deletion (helper `recents clear` — add to A2 if implemented as a subcommand, else file removal via helper `recents note --clear`; pick one and document in the PR).
 - **T18 — Logout UI + accessibility pass** (deps T15). Two-step arm/confirm with 4 s disarm and disarm-on-state-change; accessible roles; reduced-motion audit.
-- **T19 — Docs, CI, acceptance, release 1.1.0** (deps all). README chord table + remap syntax; T12 checklist gains: chords while typing, remap round-trip, countdown/clear-now, logout confirm + re-login, recents privacy check (`recents.json` contains no strings besides ids), recents off deletes store. Signed `1.1.0`.
+- **T19 — Docs, CI, acceptance, release 1.1.0** (deps all). README chord table + remap syntax + icon legend; **combined acceptance (decided)**: one manual pass covering the full v1.0 T12 checklist plus the v1.1 additions — chords while typing, remap round-trip, countdown/clear-now, logout confirm + re-login, recents privacy check (`recents.json` contains no strings besides ids), recents off deletes store, icon buttons expose accessible names (Orca spot check) — then a single signed `1.1.0` tag; no separate 1.0.0.
 
 Parallel: T14 alone first (contracts), then T15–T18 in parallel, T19 last. Settings schema additions: `showRecents` (boolean, true), `keybinds` (string, ""), both non-secret.
 

@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for command in bash cmp find grep jq sha256sum shellcheck timeout unshare; do
+          for command in bash cmp find grep jq node sha256sum shellcheck timeout unshare; do
             command -v "$command" >/dev/null || {
               printf 'Required runner tool is missing: %s\n' "$command" >&2
               exit 1
