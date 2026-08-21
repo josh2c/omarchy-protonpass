@@ -587,7 +587,8 @@ index_command() {
           (.id | test("^[A-Za-z0-9+/=_-]{1,256}$")) and
           (.share_id | type) == "string" and
           .share_id == $shareId and
-          (.title | type) == "string"
+          (.title | type) == "string" and
+          (.create_time | type) == "string"
         )
       ' <<<"$item_stdout" >/dev/null 2>&1; then
       warnings=$(jq -cn --argjson warnings "$warnings" \
@@ -600,7 +601,8 @@ index_command() {
         itemId: .id,
         shareId: .share_id,
         vaultName: $vault.name,
-        title: .title
+        title: .title,
+        createTime: .create_time
       }
     ]' <<<"$item_stdout")
     items=$(jq -cn --argjson items "$items" --argjson mapped "$mapped" '$items + $mapped')

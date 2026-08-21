@@ -588,6 +588,15 @@ Panel {
                       font.pixelSize: Style.font.bodySmall
                       elide: Text.ElideRight
                     }
+                    Text {
+                      width: parent.width
+                      text: loginRow.modelData.subtitle
+                      textFormat: Text.PlainText
+                      color: root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      elide: Text.ElideRight
+                    }
                   }
 
                   Row {
