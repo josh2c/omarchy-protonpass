@@ -15,6 +15,12 @@ Item {
     property string query: ""
     property bool refreshing: false
     property bool copyBusy: false
+    property bool clearClipboardBusy: false
+    property int clipboardClearSeconds: 0
+    property int clipboardSecondsRemaining: 0
+    readonly property bool clipboardCountdownActive: clipboardClearSeconds > 0
+        && clipboardSecondsRemaining > 0
+    property double lastSuccessfulIndexAt: 0
     property bool staleWarning: false
     property bool panelOpen: false
     readonly property var filteredItems: filterItems(items, query)
@@ -29,6 +35,7 @@ Item {
     property string _doctorStdout: ""
     property string _indexStdout: ""
     property string _copyStdout: ""
+    property string _clearClipboardStdout: ""
     property string _lockStdout: ""
 
     signal toastRequested(string message)
@@ -89,7 +96,8 @@ Item {
             doctor: ["ok", "missing-deps"],
             index: ["ready", "cli-missing", "logged-out", "locked", "unreachable", "error"],
             copy: ["copied", "no-field", "cli-missing", "logged-out", "locked", "unreachable", "error"],
-            lock: ["locked", "no-lock", "cli-missing", "logged-out", "unreachable", "error"]
+            lock: ["locked", "no-lock", "cli-missing", "logged-out", "unreachable", "error"],
+            "clear-now": ["cleared", "not-owner", "error"]
         };
         return states[commandName] !== undefined && states[commandName].indexOf(responseState) !== -1;
     }
@@ -296,6 +304,30 @@ Item {
         return true;
     }
 
+    function _hideClipboardCountdown() {
+        clipboardCountdownTimer.stop();
+        clipboardClearSeconds = 0;
+        clipboardSecondsRemaining = 0;
+    }
+
+    function _startClipboardCountdown(clearSeconds) {
+        clipboardCountdownTimer.stop();
+        clipboardClearSeconds = clearSeconds;
+        clipboardSecondsRemaining = clearSeconds;
+        if (clearSeconds > 0)
+            clipboardCountdownTimer.start();
+    }
+
+    function clearClipboard() {
+        if (clearClipboardProcess.running)
+            return false;
+        _clearClipboardStdout = "";
+        clearClipboardProcess.command = [helperPath(), "clear-now"];
+        clearClipboardBusy = true;
+        clearClipboardProcess.running = true;
+        return true;
+    }
+
     function lock() {
         if (lockProcess.running)
             return false;
@@ -321,6 +353,19 @@ Item {
     }
 
     visible: false
+
+    Timer {
+        id: clipboardCountdownTimer
+        interval: 1000
+        repeat: true
+        onTriggered: {
+            if (root.clipboardSecondsRemaining <= 1) {
+                root._hideClipboardCountdown();
+            } else {
+                root.clipboardSecondsRemaining--;
+            }
+        }
+    }
 
     Component.onCompleted: root.runDoctor(false)
 
@@ -387,6 +432,7 @@ Item {
                 root.items = cleanItems;
                 root.warnings = response.warnings.slice();
                 root._hasIndex = true;
+                root.lastSuccessfulIndexAt = Date.now();
                 root.state = "READY";
                 root.message = response.message;
                 root.staleWarning = false;
@@ -430,6 +476,8 @@ Item {
                 root._missingDependency(response.message);
                 return;
             }
+            if (response.state === "copied")
+                root._startClipboardCountdown(response.clearSeconds);
             if (root.panelOpen)
                 root.toastRequested(root._copyToast(response));
         }
@@ -437,6 +485,34 @@ Item {
             id: copyOutput
             waitForEnd: true
             onStreamFinished: root._copyStdout = text
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: clearClipboardProcess
+        running: false
+        command: []
+        onExited: function(exitCode) {
+            root.clearClipboardBusy = false;
+            var response = root._validatedResponse(
+                String(clearClipboardOutput.text || root._clearClipboardStdout || ""), "clear-now");
+            if (exitCode !== 0 || response === null) {
+                root._programError();
+                return;
+            }
+            if (response.state === "cleared" || response.state === "not-owner") {
+                root._hideClipboardCountdown();
+                if (response.state === "cleared" && root.panelOpen)
+                    root.toastRequested("Clipboard cleared");
+            } else if (root.panelOpen) {
+                root.toastRequested("Could not clear clipboard");
+            }
+        }
+        stdout: StdioCollector {
+            id: clearClipboardOutput
+            waitForEnd: true
+            onStreamFinished: root._clearClipboardStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }

@@ -18,6 +18,7 @@ Panel {
   property int cursorIndex: 0
   property string toastText: ""
   property string setupClipboardText: ""
+  property int statusTick: 0
 
   readonly property var keybindConfiguration: Keybinds.parse(
     String(svc.setting("keybinds", "")),
@@ -126,6 +127,18 @@ Panel {
     return true
   }
 
+  function syncedAgeText() {
+    statusTick
+    if (svc.lastSuccessfulIndexAt <= 0) return "syncing"
+    var minutes = Math.max(0, Math.floor((Date.now() - svc.lastSuccessfulIndexAt) / 60000))
+    return "synced " + minutes + "m ago"
+  }
+
+  function headerStatusText() {
+    var count = svc.items.length
+    return count + (count === 1 ? " login" : " logins") + " · " + syncedAgeText()
+  }
+
   function refocusSearch(text) {
     search.forceActiveFocus()
     if (text !== "") search.insert(search.cursorPosition, text)
@@ -197,6 +210,13 @@ Panel {
     interval: 3000
     repeat: false
     onTriggered: root.toastText = ""
+  }
+
+  Timer {
+    interval: 30000
+    repeat: true
+    running: root.opened && svc.state === "READY"
+    onTriggered: root.statusTick++
   }
 
   Process {
@@ -301,8 +321,11 @@ Panel {
             width: parent.width
             title: "Proton Pass"
             meta: svc.state === "READY"
-              ? svc.items.length + (svc.items.length === 1 ? " login" : " logins")
+              ? root.headerStatusText()
               : (svc.message !== "" ? svc.message : "Checking pass-cli…")
+            detail: svc.state === "READY" && search.text !== ""
+              ? svc.filteredItems.length + (svc.filteredItems.length === 1 ? " match" : " matches")
+              : ""
             foreground: root.foreground
             fontFamily: root.fontFamily
             iconComponent: Component {
@@ -501,28 +524,61 @@ Panel {
                     spacing: Style.space(2)
 
                     PanelActionButton {
-                      iconText: "u"
-                      tooltipText: "Copy username"
+                      iconText: ""
+                      tooltipText: "Copy username · " + root.shortcutLabel("copy-username")
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       enabled: !svc.copyBusy
+                      Accessible.role: Accessible.Button
+                      Accessible.name: "Copy username"
                       onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "username")
                     }
-                    PanelActionButton {
-                      iconText: "p"
-                      tooltipText: "Copy password"
-                      foreground: root.foreground
-                      fontFamily: root.fontFamily
-                      enabled: !svc.copyBusy
-                      onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "password")
+                    Text {
+                      visible: loginRow.hasCursor
+                      text: root.shortcutLabel("copy-username")
+                      textFormat: Text.PlainText
+                      color: root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      anchors.verticalCenter: parent.verticalCenter
                     }
                     PanelActionButton {
-                      iconText: "t"
-                      tooltipText: "Copy TOTP"
+                      iconText: ""
+                      tooltipText: "Copy password · " + root.shortcutLabel("copy-password")
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       enabled: !svc.copyBusy
+                      Accessible.role: Accessible.Button
+                      Accessible.name: "Copy password"
+                      onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "password")
+                    }
+                    Text {
+                      visible: loginRow.hasCursor
+                      text: root.shortcutLabel("copy-password")
+                      textFormat: Text.PlainText
+                      color: root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                    PanelActionButton {
+                      iconText: ""
+                      tooltipText: "Copy TOTP code · " + root.shortcutLabel("copy-totp")
+                      foreground: root.foreground
+                      fontFamily: root.fontFamily
+                      enabled: !svc.copyBusy
+                      Accessible.role: Accessible.Button
+                      Accessible.name: "Copy TOTP code"
                       onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "totp")
+                    }
+                    Text {
+                      visible: loginRow.hasCursor
+                      text: root.shortcutLabel("copy-totp")
+                      textFormat: Text.PlainText
+                      color: root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      anchors.verticalCenter: parent.verticalCenter
                     }
                   }
                 }
@@ -765,21 +821,93 @@ Panel {
             }
           }
 
+          BorderSurface {
+            visible: svc.state === "READY" && svc.clipboardCountdownActive
+            width: parent.width
+            implicitHeight: countdownText.implicitHeight + Style.space(14)
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
+            borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.18), 1)
+            radius: Style.cornerRadius
+            Accessible.role: Accessible.Button
+            Accessible.name: countdownText.text
+
+            Text {
+              id: countdownText
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.margins: Style.space(7)
+              text: "Clears in " + svc.clipboardSecondsRemaining + "s · click to clear now"
+              textFormat: Text.PlainText
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+            }
+
+            Rectangle {
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.bottom: parent.bottom
+              anchors.leftMargin: Style.space(7)
+              anchors.rightMargin: Style.space(7)
+              anchors.bottomMargin: Style.space(4)
+              height: 2
+              color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.14)
+              radius: 1
+
+              Rectangle {
+                width: parent.width * (svc.clipboardClearSeconds > 0
+                  ? svc.clipboardSecondsRemaining / svc.clipboardClearSeconds : 0)
+                height: parent.height
+                color: root.foreground
+                radius: 1
+              }
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              enabled: !svc.clearClipboardBusy
+              cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+              onClicked: svc.clearClipboard()
+            }
+          }
+
           Row {
             visible: svc.state === "READY"
             width: parent.width
             spacing: Style.space(8)
 
-            Text {
+            Column {
               width: parent.width - footerActions.width - parent.spacing
-              text: svc.staleWarning ? "Showing cached list — refresh failed"
-                : (svc.refreshing ? "Refreshing…" : "j/k move · u/p/t copy · L lock · r refresh")
-              textFormat: Text.PlainText
-              color: svc.staleWarning ? root.urgent : root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              elide: Text.ElideRight
               anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
+
+              Text {
+                visible: svc.staleWarning || svc.refreshing
+                width: parent.width
+                text: svc.staleWarning ? "Showing cached list — refresh failed" : "Refreshing…"
+                textFormat: Text.PlainText
+                color: svc.staleWarning ? root.urgent : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+
+              Text {
+                width: parent.width
+                text: root.shortcutLabel("copy-username") + "/"
+                  + root.shortcutLabel("copy-password") + "/"
+                  + root.shortcutLabel("copy-totp") + " copy · "
+                  + root.shortcutLabel("clear-clipboard") + " clear · "
+                  + root.shortcutLabel("lock") + " lock · "
+                  + root.shortcutLabel("refresh") + " refresh · u/p/t in list"
+                textFormat: Text.PlainText
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
             }
 
             Row {

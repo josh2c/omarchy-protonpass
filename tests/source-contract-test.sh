@@ -67,13 +67,23 @@ assert_contains 'copyProcess.command = commandLine;' \
   "copy arguments are not passed as an argv array"
 assert_contains 'lockProcess.command = [helperPath(), "lock"]' \
   "lock is not passed as an argv array"
+assert_contains 'clearClipboardProcess.command = [helperPath(), "clear-now"]' \
+  "clear-now is not passed as a fixed argv array"
+assert_contains '"clear-now": ["cleared", "not-owner", "error"]' \
+  "clear-now response states are not validated"
+assert_contains 'root._startClipboardCountdown(response.clearSeconds);' \
+  "successful copy responses do not start the client-side countdown"
+assert_contains 'root._hideClipboardCountdown();' \
+  "clear-now responses do not hide the countdown"
+assert_contains 'root.lastSuccessfulIndexAt = Date.now();' \
+  "the last successful index time is not recorded client-side"
 assert_contains 'waitForEnd: true' \
   "process output collectors are not waiting for complete responses"
-[[ $(grep -c '^    Process {' "$ROOT/Service.qml") -eq 4 ]] || \
+[[ $(grep -c '^    Process {' "$ROOT/Service.qml") -eq 5 ]] || \
   fail "Service.qml no longer has one process per helper command"
-[[ $(grep -c 'waitForEnd: true' "$ROOT/Service.qml") -eq 8 ]] || \
+[[ $(grep -c 'waitForEnd: true' "$ROOT/Service.qml") -eq 10 ]] || \
   fail "every helper stdout/stderr collector must wait for completion"
-[[ $(grep -c 'if (exitCode !== 0 || response === null)' "$ROOT/Service.qml") -eq 4 ]] || \
+[[ $(grep -c 'if (exitCode !== 0 || response === null)' "$ROOT/Service.qml") -eq 5 ]] || \
   fail "exit-code discipline is not enforced for every helper command"
 assert_not_contains 'copyProcess.running = false' \
   "copy processes can be killed before completion"
@@ -137,6 +147,30 @@ assert_panel_contains 'text: "No matches"' \
   "the empty search-result view is missing"
 assert_panel_contains 'Showing cached list — refresh failed' \
   "the stale-index warning is missing"
+assert_panel_contains '" · " + syncedAgeText()' \
+  "the header does not show the client-side sync age"
+assert_panel_contains 'svc.filteredItems.length + (svc.filteredItems.length === 1 ? " match" : " matches")' \
+  "filtering does not show a match-count badge"
+assert_panel_contains 'text: "Clears in " + svc.clipboardSecondsRemaining + "s · click to clear now"' \
+  "the text-first clipboard countdown is missing"
+assert_panel_contains 'onClicked: svc.clearClipboard()' \
+  "the countdown cannot clear the clipboard immediately"
+for action in username password 'TOTP code'; do
+  assert_panel_contains "Accessible.name: \"Copy $action\"" \
+    "the Copy $action icon button lacks an accessible name"
+done
+for shortcut_action in copy-username copy-password copy-totp clear-clipboard; do
+  assert_panel_contains "root.shortcutLabel(\"$shortcut_action\")" \
+    "the $shortcut_action UI does not use the effective shortcut label"
+done
+assert_panel_contains 'iconText: ""' \
+  "the username action does not use the Nerd Font person icon"
+assert_panel_contains 'iconText: ""' \
+  "the password action does not use the Nerd Font key icon"
+assert_panel_contains 'iconText: ""' \
+  "the TOTP action does not use the Nerd Font clock icon"
+[[ $PANEL_SOURCE != *'iconText: "u"'* && $PANEL_SOURCE != *'iconText: "p"'* && $PANEL_SOURCE != *'iconText: "t"'* ]] || \
+  fail "a row action still renders as a letter button"
 assert_panel_contains 'interval: 3000' \
   "copy feedback is not a three-second replacing toast"
 assert_panel_contains 'active: root.needsAttention' \
