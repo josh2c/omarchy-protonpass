@@ -1,6 +1,6 @@
 # omarchy-protonpass — v1 Implementation Plan
 
-Status: v1.0 **shipped through T11**; v1.1 refinements addendum (rev 3.1) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
+Status: v1.0+v1.1 built; v1.2 addendum (rev 4.1) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
 
 All product, architecture, security, and scope decisions are resolved. Facts verified against a live Omarchy 4.x install (`/usr/share/omarchy/shell`, `/usr/bin/omarchy-plugin-validate`), a clone of `robzolkos/omarchy-github`, and the `protonpass/pass-cli` Rust source (v2.3.2, 2026-08). The §2.2 manifest passes `omarchy-plugin-validate` verbatim (tested).
 
@@ -419,3 +419,37 @@ Parallel: T14 alone first (contracts), then T15–T18 in parallel, T19 last. Set
 ## A4. Security notes for v1.1
 
 Unchanged: secrets/usernames never in QML; argv/env/log rules; terminal-only auth. New surfaces: (1) recents file — ids+timestamps only, 0600, deleted on opt-out; ids are opaque but treat the file as metadata-at-rest and say so in README. (2) clip-hash file — hash only, tmpfs, deleted on clear; a hash of a weak password is offline-attackable in principle, which is why it never leaves the runtime dir and never enters QML. (3) logout is destructive (full re-login) — two-step confirm, and the arm state disarms on any state change. (4) Remap parser accepts no shell-bound strings — chords/actions are enum-validated tokens consumed only by QML.
+
+---
+
+# v1.2 Refinements Addendum (rev 4.1)
+
+Field-feedback pass. All v1.0/v1.1 security rules stand; usernames remain hidden (decided — rows stay identifier-free; vault name disambiguates).
+
+## B1. Scope (decided)
+
+1. **Plain click-to-copy icons**: remove hover tooltips, per-row shortcut labels, and the footer key legend — all shortcut UI goes. Icons are simply click-to-copy. Chords keep working (README becomes their sole documentation). `Accessible.name` annotations stay — they are screen-reader metadata, not visible chrome.
+2. **Row subtitles**: "used <relative> ago" from the local recents timestamps; items never copied show "created <date>" from the summary's `create_time`. All data already on hand; nothing new stored. Relative times computed client-side; no per-second timers (refresh on model change/panel open). Date-group section headers: deferred (Recent/All sectioning already exists).
+3. **New login creation** — two flows, invariant intact (panel never holds a secret):
+   - **(rev 4.1)** T20 verification found pass-cli 2.3.2 cannot combine `--from-template -` with `--generate-password` (template path returns first, `login.rs:163`; generation lives only on the argv path, which requires `--title` in argv — banned by §3.6), and there is **no interactive create flow** (PTY-verified: immediate exit 1). Amended design:
+   - **Generated (sole flow, in-panel)**: form with title, username or email, vault picker → helper `create` **generates the password itself** (crypto-quality: `/dev/urandom`, 24 chars, mixed classes), embeds it in the stdin template JSON, pipes to `pass-cli item create login --from-template -`, and wipes the variable. Exposure class is identical to the existing copy path (transient unexported helper memory + pipe — the accepted class); still never argv/QML/env/files/logs. Success toast offers "Copy password" via the normal copy path (source of truth: the vault).
+   - **Custom password: cut.** Without an interactive create, a terminal flow would force `--password` into a typed shell command (history + world-readable argv) — worse than not shipping. README directs custom-password creation to the official Proton apps.
+4. **Explicitly rejected**: typed password field in the panel (breaks secrets-never-in-QML; same class as the rejected in-panel unlock); password reveal/masked display; username subtitles.
+
+## B2. Contract addition (schemaVersion 1, additive)
+
+- `create --share-id <id>` reading a JSON body from **stdin**: `{"title": "...", "username": "..."}` or `{"title": "...", "email": "..."}` (exactly one of username/email; both ≤ 500 chars; title required non-empty; unknown keys rejected). **(rev 4.1)** The helper generates the password internally (`/dev/urandom`, 24 chars, upper/lower/digit/symbol guaranteed), fills the captured template shape `{"title","username","email","password","totp_uri":null,"urls":[]}`, and pipes it to `pass-cli item create login --share-id <id> --from-template -`; the password variable is wiped after the pipe closes. Title/username/password never touch argv (§3.6 applies to creation identically). States: `created` (extends: `"itemId","shareId"` if pass-cli reports them, else re-indexed) `| invalid-input |` shared error states. On success the helper appends the new item to recents.
+
+## B3. Tasks
+
+- **T20 — Helper `create` + CLI verification** (bash lane): `--get-template` shape captured to fixtures; stdin-JSON validation walls (strict keys, lengths, reject unknown fields); mock scenarios (created, invalid-input, auth states); security tests extend: title/username absent from argv (calls.log), no password material anywhere, template stdin not logged. Also pin the interactive-terminal create behavior (B1.3).
+- **T21 — QML: remove shortcut chrome** (small): tooltips, row labels, footer legend deleted; Accessible.name retained; source-contract greps updated (assert legend absent, Accessible.name present).
+- **T22 — QML: subtitles** (deps none): recents-ts join → "used X ago", fallback "created <date>"; locale-safe formatting; PlainText.
+- **T23 — QML: create form** (deps T20): non-secret fields only; vault picker fed from index vault names; validation mirrors helper walls; generated-flow success → toast + copy-password affordance; terminal button for custom flow; disabled while `copyBusy`/create in flight.
+- **T24 — Docs, combined acceptance, release**: README (create flows, chord table as sole shortcut reference); acceptance additions (create-generated round-trip incl. copy of new password, terminal custom create, subtitle correctness, no shortcut chrome, chords still fire); **release decision: the pending v1.1 tag is superseded — one combined acceptance covers v1.0+v1.1+v1.2, single signed `1.2.0` tag.**
+
+Order: T20 first (contract), T21/T22 parallel anytime, T23 after T20, T24 last. T19 (in flight) narrows to docs + CI timeouts; its release step moves to T24.
+
+## B4. Security notes
+
+Create introduces the first **write** path. Mitigations: stdin-only fields (no argv), strict input walls both sides, helper-side generation with immediate variable wipe (same transient class as the copy path — rev 4.1), no user-chosen secrets anywhere in our surfaces, and the panel form holds only non-secret fields. No new files, env vars, or retention. Abuse surface (a malicious co-resident plugin invoking create) is unchanged in kind from existing copy/lock — same-UID actors already hold full CLI access; documented in README's residual risks.

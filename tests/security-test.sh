@@ -36,6 +36,18 @@ fail_on_match 'property[[:space:]]+(string|var)[[:space:]]+_?(secret|password|us
 if grep -Fn -- '--show-secrets' "${security_sources[@]}" >/dev/null; then
   fail "runtime source enables pass-cli secret display"
 fi
+if grep -Fn -- '--generate-password' "${security_sources[@]}" >/dev/null; then
+  fail "runtime source delegates generation through the incompatible argv path"
+fi
+if grep -Fn -- '--password' "${security_sources[@]}" >/dev/null; then
+  fail "runtime source places a password option in argv"
+fi
+grep -Fq -- '--share-id "$CREATE_SHARE_ID" --from-template -' "$HELPER" ||
+  fail "create does not use the fixed stdin-template command"
+grep -Fq -- 'od -An -N4 -tu4 /dev/urandom' "$HELPER" ||
+  fail "create password generation does not read /dev/urandom"
+grep -Fq -- 'unset password CREATE_INPUT' "$HELPER" ||
+  fail "create does not wipe its password variable after the stdin pipe closes"
 if grep -Fn -- '`' "${security_sources[@]}" >/dev/null; then
   fail "runtime source contains backtick interpolation"
 fi
@@ -43,19 +55,19 @@ fi
 make_test_sandbox
 
 proc_file_contains_marker() {
-  local file=$1 part content=""
+  local file=$1 marker=${2:-$MARKER} part content=""
   [[ -r $file ]] || return 1
   while IFS= read -r -d '' part; do
     content+=$part
   done <"$file" 2>/dev/null || true
-  [[ $content == *"$MARKER"* ]]
+  [[ $content == *"$marker"* ]]
 }
 
 regular_file_contains_marker() {
-  local file=$1 content=""
+  local file=$1 marker=${2:-$MARKER} content=""
   [[ -r $file ]] || return 1
   content=$(<"$file")
-  [[ $content == *"$MARKER"* ]]
+  [[ $content == *"$marker"* ]]
 }
 
 MOCK_SCENARIO=security-marker \
@@ -128,9 +140,54 @@ assert_jq '.command == "logout" and .state == "logged-out-ok"' "$logout_response
 assert_jq '. == [["logout"]]' "$(jq -sc '.' "$MOCK_CALLS_LOG")" \
   "logout uses fixed argv"
 
+CREATE_TITLE_MARKER=OMPP-CREATE-TITLE-5bb63d1e
+CREATE_USERNAME_MARKER=OMPP-CREATE-USERNAME-8e301a4c
+create_body=$(jq -cn \
+  --arg title "$CREATE_TITLE_MARKER" \
+  --arg username "$CREATE_USERNAME_MARKER" \
+  '{title:$title,username:$username}')
+: >"$MOCK_CALLS_LOG"
+printf '%s' "$create_body" | \
+  MOCK_SCENARIO=security-create MOCK_CREATE_SLEEP_SECONDS=1 \
+  "$HELPER" create --share-id share_fixture_1 \
+    >"$TEST_SANDBOX/create-security.stdout" \
+    2>"$TEST_SANDBOX/create-security.stderr" &
+create_helper_pid=$!
+
+sleep 0.1
+kill -0 "$create_helper_pid" 2>/dev/null || fail "create helper exited before process inspection"
+for cmdline in /proc/[0-9]*/cmdline; do
+  if proc_file_contains_marker "$cmdline" "$CREATE_TITLE_MARKER" ||
+     proc_file_contains_marker "$cmdline" "$CREATE_USERNAME_MARKER"; then
+    fail "create metadata appeared in a process command line"
+  fi
+done
+if proc_file_contains_marker "/proc/$create_helper_pid/environ" "$CREATE_TITLE_MARKER" ||
+   proc_file_contains_marker "/proc/$create_helper_pid/environ" "$CREATE_USERNAME_MARKER"; then
+  fail "create metadata appeared in the helper environment"
+fi
+
+wait "$create_helper_pid"
+create_body=""
+unset create_body
+[[ ! -s $TEST_SANDBOX/create-security.stderr ]] || fail "create helper wrote stderr"
+assert_jq '.command == "create" and .state == "created" and
+  .itemId == "item_created_1" and .shareId == "share_fixture_1"' \
+  "$(<"$TEST_SANDBOX/create-security.stdout")" "security create response"
+assert_jq '. == [["item","create","login","--share-id","share_fixture_1","--from-template","-"]]' \
+  "$(jq -sc '.' "$MOCK_CALLS_LOG")" "create uses fixed metadata-free argv"
+if grep -Fq -- "$CREATE_TITLE_MARKER" "$MOCK_CALLS_LOG" ||
+   grep -Fq -- "$CREATE_USERNAME_MARKER" "$MOCK_CALLS_LOG"; then
+  fail "create metadata entered the pass-cli argv log"
+fi
+
 while IFS= read -r -d '' sandbox_file; do
   if regular_file_contains_marker "$sandbox_file"; then
     fail "secret marker appeared in a sandbox file"
+  fi
+  if regular_file_contains_marker "$sandbox_file" "$CREATE_TITLE_MARKER" ||
+     regular_file_contains_marker "$sandbox_file" "$CREATE_USERNAME_MARKER"; then
+    fail "create template metadata appeared in a sandbox file"
   fi
 done < <(find "$TEST_SANDBOX" -type f -print0)
 

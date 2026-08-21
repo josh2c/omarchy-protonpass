@@ -137,6 +137,54 @@ if [[ ${1:-} == item && ${2:-} == list ]]; then
   exit 0
 fi
 
+if [[ ${1:-} == item && ${2:-} == create && ${3:-} == login ]]; then
+  if [[ $# -eq 4 && $4 == --get-template ]]; then
+    cat "$FIXTURES/login-create-template.json"
+    exit 0
+  fi
+  if [[ $# -eq 3 ]]; then
+    fixture_exit create-no-args
+  fi
+
+  create_body=$(cat)
+  if ! jq -e '
+      type == "object" and
+      (keys | sort) == ["email", "password", "title", "totp_uri", "urls", "username"] and
+      (.title | type == "string" and length > 0 and length <= 500) and
+      (((.username | type == "string" and length <= 500) and .email == null) or
+       ((.email | type == "string" and length <= 500) and .username == null)) and
+      (.password | type == "string" and length == 24 and
+        test("^[A-Za-z0-9!@#$%^&*()_+=-]+$") and
+        test("[A-Z]") and test("[a-z]") and test("[0-9]") and
+        test("[!@#$%^&*()_+=-]")) and
+      .totp_uri == null and .urls == []
+    ' <<<"$create_body" >/dev/null 2>&1; then
+    printf 'Error: Invalid synthetic create template\n' >&2
+    exit 2
+  fi
+  case $scenario in
+    create-username)
+      jq -e '.title == "T20 Synthetic Login" and .username == "test-user@example.test"' \
+        <<<"$create_body" >/dev/null || exit 2
+      ;;
+    create-email)
+      jq -e '.title == "T20 Email Login" and .email == "mailbox@example.test"' \
+        <<<"$create_body" >/dev/null || exit 2
+      ;;
+    create-error)
+      printf 'Error: Synthetic create failure\n' >&2
+      exit 1
+      ;;
+  esac
+  create_body=""
+  unset create_body
+  if [[ -n ${MOCK_CREATE_SLEEP_SECONDS:-} ]]; then
+    sleep "$MOCK_CREATE_SLEEP_SECONDS"
+  fi
+  printf 'item_created_1\n'
+  exit 0
+fi
+
 if [[ ${1:-} == item && ${2:-} == view ]]; then
   field=$(arg_value --field "$@") || field=""
   item_id=$(arg_value --item-id "$@") || item_id=""

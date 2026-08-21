@@ -31,6 +31,20 @@ assert_jq 'type == "object" and (.vaults|type) == "array" and (.vaults[0]|keys|s
 ready_items=$(MOCK_SCENARIO=ready "$PASS_CLI" item list --share-id share_fixture_1 --filter-type login --filter-state active --output json)
 assert_jq 'type == "object" and (.items|length) == 1 and (.items[0]|has("id") and has("share_id") and has("title") and has("item_type"))' "$ready_items" "ready item-list shape"
 
+"$PASS_CLI" item create login --get-template >"$TEST_SANDBOX/login-create-template.json"
+assert_file_eq "$FIXTURES/login-create-template.json" \
+  "$TEST_SANDBOX/login-create-template.json" "login create template shape"
+set +e
+"$PASS_CLI" item create login >"$TEST_SANDBOX/create-no-args.stdout" \
+  2>"$TEST_SANDBOX/create-no-args.stderr"
+create_no_args_status=$?
+set -e
+assert_eq "$(<"$FIXTURES/create-no-args.exit")" "$create_no_args_status" \
+  "non-interactive create exit status"
+assert_file_eq "$FIXTURES/create-no-args.stderr" \
+  "$TEST_SANDBOX/create-no-args.stderr" "non-interactive create stderr"
+[[ ! -s $TEST_SANDBOX/create-no-args.stdout ]] || fail "non-interactive create wrote stdout"
+
 multivault=$(MOCK_SCENARIO=ready-multivault "$PASS_CLI" vault list --output json)
 assert_jq '(.vaults|length) == 2' "$multivault" "multi-vault list"
 work_items=$(MOCK_SCENARIO=ready-multivault "$PASS_CLI" item list --share-id share_fixture_2 --filter-type login --filter-state active --output json)
@@ -159,6 +173,11 @@ assert_invalid_helper copy copy --share-id share --item-id item --field password
 assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds nope
 assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds 45 --paste-once --paste-once
 assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds 45 --unknown
+assert_invalid_helper create create
+assert_invalid_helper create create --share-id
+assert_invalid_helper create create --share-id share --share-id other
+assert_invalid_helper create create --share-id 'bad id'
+assert_invalid_helper create create --unknown value
 assert_invalid_helper lock lock extra
 assert_invalid_helper lock lock --unknown
 assert_invalid_helper logout logout extra
@@ -181,6 +200,66 @@ assert_invalid_helper copy copy --share-id '$(touch /tmp/helper-never-run)' --it
 
 index_ready=$(MOCK_SCENARIO=ready "$HELPER" index --exclude-vaults '')
 assert_jq '.schemaVersion == 1 and .command == "index" and .state == "ready" and (.message|type) == "string" and .items == [{itemId:"item_fixture_1",shareId:"share_fixture_1",vaultName:"Personal",title:"T0 Synthetic Login",createTime:"2026-08-20T22:44:15"}] and .warnings == []' "$index_ready" "index ready contract"
+
+assert_invalid_create_input() {
+  local body=$1 label=$2 output status
+  set +e
+  output=$(printf '%s' "$body" | "$HELPER" create --share-id share_fixture_1 \
+    2>"$TEST_SANDBOX/create-invalid.stderr")
+  status=$?
+  set -e
+  assert_eq "0" "$status" "invalid create input handled for $label"
+  assert_jq '.schemaVersion == 1 and .command == "create" and .state == "invalid-input" and (.message|type) == "string"' \
+    "$output" "invalid create input envelope for $label"
+  [[ ! -s $TEST_SANDBOX/create-invalid.stderr ]] || fail "invalid create input wrote stderr for $label"
+}
+
+calls_before_invalid_create=$(jq -sc 'length' "$MOCK_CALLS_LOG")
+assert_invalid_create_input '' empty
+assert_invalid_create_input '{not json' malformed
+assert_invalid_create_input '[]' array
+assert_invalid_create_input '{}' missing-fields
+assert_invalid_create_input '{"title":"Login","username":"user","extra":true}' unknown-key
+assert_invalid_create_input '{"title":"Login","username":"user","email":"mail@example.test"}' both-identifiers
+assert_invalid_create_input '{"title":"Login"}' missing-identifier
+assert_invalid_create_input '{"title":"","username":"user"}' empty-title
+assert_invalid_create_input '{"title":7,"username":"user"}' non-string-title
+assert_invalid_create_input '{"title":"Login","username":null}' non-string-username
+long_create_value=$(printf '%0501d' 0)
+assert_invalid_create_input "$(jq -cn --arg value "$long_create_value" '{title:$value,username:"user"}')" long-title
+assert_invalid_create_input "$(jq -cn --arg value "$long_create_value" '{title:"Login",username:$value}')" long-username
+assert_invalid_create_input "$(jq -cn --arg value "$long_create_value" '{title:"Login",email:$value}')" long-email
+calls_after_invalid_create=$(jq -sc 'length' "$MOCK_CALLS_LOG")
+assert_eq "$calls_before_invalid_create" "$calls_after_invalid_create" \
+  "invalid create input reached pass-cli"
+
+rm -f -- "$XDG_STATE_HOME/omarchy-protonpass/recents.json"
+: >"$MOCK_CALLS_LOG"
+create_username_body='{"title":"T20 Synthetic Login","username":"test-user@example.test"}'
+create_username=$(printf '%s' "$create_username_body" | \
+  MOCK_SCENARIO=create-username "$HELPER" create --share-id share_fixture_1)
+assert_jq '.schemaVersion == 1 and .command == "create" and .state == "created" and
+  .itemId == "item_created_1" and .shareId == "share_fixture_1" and (.message|type) == "string"' \
+  "$create_username" "username create contract"
+assert_jq '. == [["item","create","login","--share-id","share_fixture_1","--from-template","-"]]' \
+  "$(jq -sc '.' "$MOCK_CALLS_LOG")" "create uses metadata-free fixed argv"
+[[ $(<"$MOCK_CALLS_LOG") != *'T20 Synthetic Login'* ]] || fail "create title entered argv log"
+[[ $(<"$MOCK_CALLS_LOG") != *'test-user@example.test'* ]] || fail "create username entered argv log"
+create_recents=$("$HELPER" recents load)
+assert_jq '.state == "ok" and .recents[0].shareId == "share_fixture_1" and
+  .recents[0].itemId == "item_created_1"' "$create_recents" \
+  "created login is appended to recents"
+
+: >"$MOCK_CALLS_LOG"
+create_email_body='{"title":"T20 Email Login","email":"mailbox@example.test"}'
+create_email=$(printf '%s' "$create_email_body" | \
+  MOCK_SCENARIO=create-email "$HELPER" create --share-id share_fixture_1)
+assert_jq '.state == "created" and .itemId == "item_created_1" and .shareId == "share_fixture_1"' \
+  "$create_email" "email create contract"
+assert_jq 'all(.[]; (join(" ") | contains("T20 Email Login") | not) and
+  (join(" ") | contains("mailbox@example.test") | not))' \
+  "$(jq -sc '.' "$MOCK_CALLS_LOG")" "email create metadata absent from argv"
+
 copy_contract=$("$HELPER" copy --clear-seconds 0000 --field totp --item-id item_1 --share-id share/1= --paste-once)
 assert_jq '.schemaVersion == 1 and .command == "copy" and .state == "copied" and .field == "totp" and .fallbackUsed == false and .clearSeconds == 0' "$copy_contract" "copy contract"
 lock_stub=$("$HELPER" lock)
@@ -198,6 +277,22 @@ assert_jq '.schemaVersion == 1 and .command == "recents" and .state == "ok" and 
 # Source only the helper's core functions; its guarded main must not execute.
 # shellcheck disable=SC1090
 source "$HELPER"
+
+declare -A generated_passwords=()
+for generation_run in {1..25}; do
+  generate_password || fail "password generation failed on run $generation_run"
+  [[ ${#GENERATED_PASSWORD} -eq 24 ]] || fail "generated password length on run $generation_run"
+  [[ $GENERATED_PASSWORD =~ ^[A-Za-z0-9!@#\$%\^\&*\(\)_+=-]+$ ]] || \
+    fail "generated password charset on run $generation_run"
+  [[ $GENERATED_PASSWORD =~ [A-Z] && $GENERATED_PASSWORD =~ [a-z] &&
+     $GENERATED_PASSWORD =~ [0-9] && $GENERATED_PASSWORD =~ [!@#\$%\^\&*\(\)_+=-] ]] || \
+    fail "generated password class coverage on run $generation_run"
+  [[ -z ${generated_passwords[$GENERATED_PASSWORD]:-} ]] || \
+    fail "generated password repeated on run $generation_run"
+  generated_passwords[$GENERATED_PASSWORD]=1
+  GENERATED_PASSWORD=""
+done
+unset GENERATED_PASSWORD generated_passwords
 
 assert_classifier() {
   local command_name=$1 status=$2 stderr_blob=$3 expected_state=$4 expected_kind=$5 expected_message=$6
@@ -584,6 +679,10 @@ assert_jq '.state == "unreachable"' "$offline_logout" "offline logout"
 failed_logout=$(MOCK_SCENARIO=logout-error "$HELPER" logout)
 assert_jq '.state == "error" and (tostring|contains("Synthetic logout failure")|not)' \
   "$failed_logout" "logout sanitizes generic stderr"
+failed_create=$(printf '%s' "$create_username_body" | \
+  MOCK_SCENARIO=create-error "$HELPER" create --share-id share_fixture_1)
+assert_jq '.state == "error" and (tostring|contains("Synthetic create failure")|not)' \
+  "$failed_create" "create sanitizes generic stderr"
 
 rm "$TEST_BIN/pass-cli"
 missing_copy_cli=$("$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0)
@@ -592,6 +691,9 @@ missing_lock_cli=$("$HELPER" lock)
 assert_jq '.state == "cli-missing"' "$missing_lock_cli" "lock missing pass-cli"
 missing_logout_cli=$("$HELPER" logout)
 assert_jq '.state == "cli-missing"' "$missing_logout_cli" "logout missing pass-cli"
+missing_create_cli=$(printf '%s' "$create_username_body" | \
+  "$HELPER" create --share-id share_fixture_1)
+assert_jq '.state == "cli-missing"' "$missing_create_cli" "create missing pass-cli"
 ln -s "$TEST_ROOT/tests/mocks/pass-cli" "$TEST_BIN/pass-cli"
 
 rm "$TEST_BIN/wl-copy"
@@ -648,6 +750,26 @@ for matrix_row in \
   run_shared_matrix_case index "$matrix_scenario" "$index_state"
   run_shared_matrix_case copy "$matrix_scenario" "$copy_state"
   run_shared_matrix_case lock "$matrix_scenario" "$lock_state"
+done
+
+for create_row in \
+  'ready:created' \
+  'logged-out:logged-out' \
+  'expired:logged-out' \
+  'locked:locked' \
+  'offline:unreachable' \
+  'timeout-sleeps:unreachable'; do
+  IFS=: read -r create_scenario create_state <<<"$create_row"
+  if [[ $create_scenario == timeout-sleeps ]]; then
+    create_matrix=$(printf '%s' "$create_username_body" | \
+      MOCK_SCENARIO=$create_scenario MOCK_TIMEOUT_EXIT=1 \
+      "$HELPER" create --share-id share_fixture_1)
+  else
+    create_matrix=$(printf '%s' "$create_username_body" | \
+      MOCK_SCENARIO=$create_scenario "$HELPER" create --share-id share_fixture_1)
+  fi
+  assert_jq ".schemaVersion == 1 and .command == \"create\" and .state == \"$create_state\"" \
+    "$create_matrix" "create $create_scenario matrix contract"
 done
 
 for logout_row in \

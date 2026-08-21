@@ -4,6 +4,7 @@ set -euo pipefail
 readonly DOCTOR_TIMEOUT_SECONDS=5
 readonly INDEX_TIMEOUT_SECONDS=20
 readonly COPY_TIMEOUT_SECONDS=15
+readonly CREATE_TIMEOUT_SECONDS=20
 readonly LOCK_TIMEOUT_SECONDS=15
 readonly LOGOUT_TIMEOUT_SECONDS=15
 readonly CLIP_HASH_BASENAME=omarchy-protonpass.clip
@@ -82,6 +83,26 @@ emit_copy() {
       fallbackUsed: $fallbackUsed,
       clearSeconds: $clearSeconds
     }'
+}
+
+emit_create() {
+  local state=$1 message=$2 item_id=${3:-} share_id=${4:-}
+  if [[ $state == created && -n $item_id && -n $share_id ]]; then
+    jq -cn \
+      --arg state "$state" \
+      --arg message "$message" \
+      --arg itemId "$item_id" \
+      --arg shareId "$share_id" '{
+        schemaVersion: 1,
+        command: "create",
+        state: $state,
+        message: $message,
+        itemId: $itemId,
+        shareId: $shareId
+      }'
+  else
+    emit_simple create "$state" "$message"
+  fi
 }
 
 emit_copy_classified_failure() {
@@ -265,6 +286,60 @@ classify_failure() {
 
 valid_id() {
   [[ $1 =~ ^[A-Za-z0-9+/=_-]{1,256}$ ]]
+}
+
+random_below() {
+  local limit=$1 value cutoff
+  (( limit > 0 )) || return 1
+  cutoff=$((4294967296 - (4294967296 % limit)))
+  while :; do
+    read -r value < <(od -An -N4 -tu4 /dev/urandom) || return 1
+    [[ $value =~ ^[0-9]+$ ]] || continue
+    if (( value < cutoff )); then
+      RANDOM_BELOW=$((value % limit))
+      return 0
+    fi
+  done
+}
+
+append_random_char() {
+  local charset=$1
+  random_below "${#charset}" || return 1
+  GENERATED_PASSWORD+=${charset:RANDOM_BELOW:1}
+}
+
+generate_password() {
+  local uppercase='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  local lowercase='abcdefghijklmnopqrstuvwxyz'
+  local digits='0123456789'
+  local symbols='!@#$%^&*()-_=+'
+  local alphabet="${uppercase}${lowercase}${digits}${symbols}"
+  local combined i swap_index temporary
+  local -a characters=()
+
+  GENERATED_PASSWORD=""
+  append_random_char "$uppercase" || return 1
+  append_random_char "$lowercase" || return 1
+  append_random_char "$digits" || return 1
+  append_random_char "$symbols" || return 1
+  for (( i = 4; i < 24; i++ )); do
+    append_random_char "$alphabet" || return 1
+  done
+
+  combined=$GENERATED_PASSWORD
+  GENERATED_PASSWORD=""
+  for (( i = 0; i < ${#combined}; i++ )); do
+    characters+=("${combined:i:1}")
+  done
+  combined=""
+  for (( i = ${#characters[@]} - 1; i > 0; i-- )); do
+    random_below "$((i + 1))" || return 1
+    swap_index=$RANDOM_BELOW
+    temporary=${characters[i]}
+    characters[i]=${characters[swap_index]}
+    characters[swap_index]=$temporary
+  done
+  printf -v GENERATED_PASSWORD '%s' "${characters[@]}"
 }
 
 normalize_clear_seconds() {
@@ -478,6 +553,41 @@ parse_copy_args() {
   COPY_FIELD=$field
   COPY_CLEAR_SECONDS=$NORMALIZED_CLEAR_SECONDS
   COPY_PASTE_ONCE=$paste_once
+}
+
+parse_create_args() {
+  local share_id="" seen_share=false
+
+  while (( $# > 0 )); do
+    case $1 in
+      --share-id)
+        if [[ $seen_share == true || $# -lt 2 ]]; then return 2; fi
+        share_id=$2
+        seen_share=true
+        shift 2
+        ;;
+      *) return 2 ;;
+    esac
+  done
+
+  [[ $seen_share == true ]] || return 2
+  valid_id "$share_id" || return 2
+  CREATE_SHARE_ID=$share_id
+}
+
+read_create_input() {
+  CREATE_INPUT=$(cat)
+  jq -e '
+    type == "object" and
+    ((keys | sort) == ["title", "username"] or
+     (keys | sort) == ["email", "title"]) and
+    (.title | type == "string" and length > 0 and length <= 500) and
+    if has("username") then
+      (.username | type == "string" and length <= 500)
+    else
+      (.email | type == "string" and length <= 500)
+    end
+  ' <<<"$CREATE_INPUT" >/dev/null 2>&1
 }
 
 parse_recents_args() {
@@ -815,6 +925,79 @@ recents_command() {
   esac
 }
 
+create_command() {
+  local +x password="" stdout="" stderr_blob=""
+  local status=0 password_read
+
+  if ! read_create_input; then
+    CREATE_INPUT=""
+    unset CREATE_INPUT
+    emit_create invalid-input "Enter a title and exactly one username or email"
+    return 0
+  fi
+
+  if ! command -v pass-cli >/dev/null 2>&1; then
+    CREATE_INPUT=""
+    unset CREATE_INPUT
+    classify_failure create 127 ""
+    emit_create "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
+    return 0
+  fi
+
+  if ! generate_password; then
+    GENERATED_PASSWORD=""
+    CREATE_INPUT=""
+    unset GENERATED_PASSWORD CREATE_INPUT
+    emit_create error "Could not create login"
+    return 0
+  fi
+  password=$GENERATED_PASSWORD
+  GENERATED_PASSWORD=""
+  unset GENERATED_PASSWORD
+
+  if ! exec {password_read}< <(printf '%s' "$password"); then
+    password=""
+    CREATE_INPUT=""
+    unset password CREATE_INPUT
+    emit_create error "Could not create login"
+    return 0
+  fi
+
+  run_pass_cli_captured stdout stderr_blob status \
+    "$CREATE_TIMEOUT_SECONDS" item create login \
+    --share-id "$CREATE_SHARE_ID" --from-template - < <(
+      jq -c --rawfile generatedPassword "/dev/fd/$password_read" '
+        {
+          title: .title,
+          username: (if has("username") then .username else null end),
+          email: (if has("email") then .email else null end),
+          password: $generatedPassword,
+          totp_uri: null,
+          urls: []
+        }
+      ' <<<"$CREATE_INPUT" 2>/dev/null
+    )
+
+  exec {password_read}<&-
+  password=""
+  CREATE_INPUT=""
+  unset password CREATE_INPUT
+
+  if (( status != 0 )); then
+    classify_failure create "$status" "$stderr_blob"
+    emit_create "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
+    return 0
+  fi
+  if ! valid_id "$stdout"; then
+    emit_create error "Could not create login"
+    return 0
+  fi
+
+  # Recent metadata is fail-soft because the login already exists remotely.
+  note_recent "$CREATE_SHARE_ID" "$stdout" || true
+  emit_create created "Login created" "$stdout" "$CREATE_SHARE_ID"
+}
+
 lock_command() {
   local stdout="" stderr_blob="" status=0
 
@@ -881,6 +1064,10 @@ main() {
     copy)
       if ! parse_copy_args "$@"; then emit_command_error copy; return 2; fi
       copy_command
+      ;;
+    create)
+      if ! parse_create_args "$@"; then emit_command_error create; return 2; fi
+      create_command
       ;;
     lock)
       if (( $# != 0 )); then emit_command_error lock; return 2; fi
