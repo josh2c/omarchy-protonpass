@@ -1,6 +1,6 @@
 # omarchy-protonpass — v1 Implementation Plan
 
-Status: **ready to implement** (rev 2.5, **contracts frozen** at T3 acceptance) · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
+Status: v1.0 **shipped through T11**; v1.1 refinements addendum (rev 3.0) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
 
 All product, architecture, security, and scope decisions are resolved. Facts verified against a live Omarchy 4.x install (`/usr/share/omarchy/shell`, `/usr/bin/omarchy-plugin-validate`), a clone of `robzolkos/omarchy-github`, and the `protonpass/pass-cli` Rust source (v2.3.2, 2026-08). The §2.2 manifest passes `omarchy-plugin-validate` verbatim (tested). `salemsayed/omwarden` does not exist and is not a reference.
 
@@ -369,3 +369,52 @@ Each task lands with its tests in one PR. ∥ = parallelizable once deps met.
 | R8 | Co-resident plugins read metadata in the shared shell process | Low (accepted) | Secrets never in QML; metadata-only exposure documented |
 
 **Ready-to-implement checklist** — all resolved: scope frozen · manifest final (validator-tested) · helper CLI + JSON contracts final · state machine + focus model + copy lifecycle final · settings final · clipboard policy (45s hash-verified clear, opt-in paste-once — kept per product decision) · secret-path construction decided (sentinel capture, inline clearer with fd redirect) · retention (session RAM) · login (terminal + web flow) · lock (requires `create-lock`, handled) · TOTP (fail-soft, flattened-map extraction) · vault scoping (all + trimmed exclude string) · username fallback (username→email; empty==absent per source) · identity (`josh2c.protonpass`, MIT) · eligible test account confirmed · **T0 complete — zero remaining unknowns**; every classifier pattern is now live-captured and fixture-pinned. **No blockers.**
+
+---
+
+# v1.1 Refinements Addendum (rev 3.0)
+
+Scope decided after v1.0 field use, a prior-art survey (rofi-pass, rofi-rbw, KeePassXC, 1Password Quick Access, Bitwarden, krunner/ulauncher/Walker plugins), and a review of `salemsayed/omawarden` (the Bitwarden Omarchy plugin; note: the v1 brief's `omwarden` URL was a typo — the repo exists as `omawarden`). All v1.0 security rules stand unchanged and non-negotiable.
+
+## A1. Scope
+
+**In (core, locked):**
+1. **Modifier chords, active even while typing in search**: `Ctrl+U` copy username · `Ctrl+P` copy password · `Ctrl+T` copy TOTP (of the highlighted item) · `Ctrl+R` refresh · `Ctrl+L` lock · `Ctrl+Shift+X` clear clipboard now. `Enter` = copy password, `Shift+Enter` = copy username. Existing plain `u/p/t/L/r` in list focus retained. Rationale: direct mnemonics match our list-focus letters and omawarden's local convention; modifier chords never collide with text entry (rofi-rbw/1Password-proven).
+2. **Self-teaching UI**: footer legend showing the live chords (reflecting any remaps); the highlighted row's action buttons show their shortcut labels.
+3. **Clipboard countdown + clear-now**: after a copy, the footer shows text-first "Clears in Ns" with a thin progress bar (KeePassXC pattern; text satisfies reduced-motion); clicking it or `Ctrl+Shift+X` clears immediately — hash-verified, never clearing newer content. Countdown hides on expiry/clear.
+4. **Logout**: action beside Lock; **two-step arm/confirm** (button arms to "Confirm log out" for 4 s, then disarms — omarchy-github destructive-action pattern). Runs `pass-cli logout` via the helper; success → LOGGED_OUT, model dropped.
+5. **Header status line** (omawarden-inspired): "N logins · synced Xm ago"; during filtering, a match-count badge. Times computed client-side from the last successful index.
+6. **Accessibility pass**: keyboard-complete (already), password accessible-role on any element that could name a secret action, countdown announced as text, no motion-only state changes (KeePassXC #1920/#10143 are the cautionary prior art).
+
+**In (user-selected):**
+7. **Recent items before typing**: with an empty query the list shows a "Recent" section (last 8 copied items, most-recent first) above "All". Storage: ids + timestamps **only** — never titles, vault names, or field names — via the helper (§A2), joined against the in-RAM index at render; items no longer in the index are silently dropped. Setting `showRecents` (boolean, default true); disabling also deletes the store.
+8. **Remappable keybindings**: setting `keybinds` (string, default "") of comma-separated `chord:action` entries, e.g. `ctrl+shift+c:copy-password,ctrl+o:logout`. Chord grammar: `(ctrl+)?(shift+)?(alt+)?(enter|f[1-9]|[a-z])`, case-insensitive. Actions: `copy-username|copy-password|copy-totp|clear-clipboard|lock|logout|refresh`. Parsed defensively in QML only; an invalid entry is ignored with one console.warn naming the entry (never its position in a secret flow — there is none); valid entries override that chord's default; unlisted defaults remain. The footer legend renders the effective map.
+
+**Explicitly rejected (with reasons, from the same survey):**
+- In-panel unlock/master-password entry (omawarden's `UnlockPrompt.qml`): credentials in QML violate our §3 model; terminal-only auth stands.
+- Username/email row subtitles (omawarden, rofi-rbw): usernames never enter QML — unchanged.
+- "Open site" action: URLs are not in Proton's non-secret summaries; unavailable without content fetches.
+- All-fields enumeration / autotype: content fetch is banned; Wayland autotype is the most complaint-ridden feature in every surveyed tool.
+- Favorites section: Proton summary `flags` semantics unverified; revisit if/when documented.
+
+## A2. Contract additions (schemaVersion 1, additive — permitted under the freeze rule)
+
+New helper commands, same envelope (`command` enum grows accordingly):
+- `logout` → runs `pass-cli logout`; states `logged-out-ok | cli-missing | unreachable | error` ("already logged out" classifies as `logged-out-ok`).
+- `clear-now` → hash-verifies and clears the clipboard; states `cleared | not-owner | error`. Ownership: `copy` now writes the value's sha256 (hash only) to `$XDG_RUNTIME_DIR/omarchy-protonpass.clip` (0600, tmpfs); `clear-now` and the timed clearer both verify the live clipboard against it and delete the file on clear. `not-owner` (mismatch or no file) is a silent no-op for the UI.
+- `recents load` → `{"recents": [{"shareId","itemId","ts"}]}` (≤8); `recents note --share-id X --item-id Y` → appends/promotes, prunes to 8, states `ok | error`. File: `$XDG_STATE_HOME/omarchy-protonpass/recents.json` (0600; ids + epoch timestamps only). `copy` calls the note logic internally on success — QML never writes files.
+
+## A3. Tasks (each lands with tests, same discipline as v1.0)
+
+- **T14 — Helper: logout, clear-now, recents, clip-hash file** (bash lane). Mocks gain logout/clear scenarios; security-test extends: recents file contains only id/ts keys; clip file contains only 64-hex; no new env vars; `logout` uses fixed argv. Two-step confirm is QML-side; helper logout is single-shot.
+- **T15 — QML: chord table + remap parser** (deps T14 contracts). Default map as §A1.1; `keybinds` parser with the grammar above; unit-style assertions in source-contract tests (parser rejects `ctrl+;`, `meta+x`, duplicate chords keep last).
+- **T16 — QML: countdown, clear-now, header status, shortcut labels** (deps T14, T15). Countdown driven by the copy response's `clearSeconds`, client-side timer; clear-now button/chord calls helper `clear-now`; hides on `cleared`/`not-owner`/expiry. Header string + match badge.
+- **T17 — QML: recents section** (deps T14). Empty-query view = Recent + All sections; join by ids; respects `showRecents`; disabling triggers store deletion (helper `recents clear` — add to A2 if implemented as a subcommand, else file removal via helper `recents note --clear`; pick one and document in the PR).
+- **T18 — Logout UI + accessibility pass** (deps T15). Two-step arm/confirm with 4 s disarm and disarm-on-state-change; accessible roles; reduced-motion audit.
+- **T19 — Docs, CI, acceptance, release 1.1.0** (deps all). README chord table + remap syntax; T12 checklist gains: chords while typing, remap round-trip, countdown/clear-now, logout confirm + re-login, recents privacy check (`recents.json` contains no strings besides ids), recents off deletes store. Signed `1.1.0`.
+
+Parallel: T14 alone first (contracts), then T15–T18 in parallel, T19 last. Settings schema additions: `showRecents` (boolean, true), `keybinds` (string, ""), both non-secret.
+
+## A4. Security notes for v1.1
+
+Unchanged: secrets/usernames never in QML; argv/env/log rules; terminal-only auth. New surfaces: (1) recents file — ids+timestamps only, 0600, deleted on opt-out; ids are opaque but treat the file as metadata-at-rest and say so in README. (2) clip-hash file — hash only, tmpfs, deleted on clear; a hash of a weak password is offline-attackable in principle, which is why it never leaves the runtime dir and never enters QML. (3) logout is destructive (full re-login) — two-step confirm, and the arm state disarms on any state change. (4) Remap parser accepts no shell-bound strings — chords/actions are enum-validated tokens consumed only by QML.

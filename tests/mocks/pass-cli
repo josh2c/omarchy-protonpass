@@ -89,6 +89,7 @@ fi
 
 case "$scenario" in
   logged-out) fixture_exit logged-out ;;
+  already-logged-out) fixture_exit logged-out ;;
   locked) fixture_exit locked ;;
   expired) fixture_exit invalidated ;;
   offline) fixture_exit network-down ;;
@@ -190,6 +191,15 @@ fi
 if [[ ${1:-} == session && ${2:-} == lock ]]; then
   if [[ $scenario == no-lock ]]; then fixture_exit no-lock; fi
   printf 'Session locked successfully\n'
+  exit 0
+fi
+
+if [[ ${1:-} == logout && $# -eq 1 ]]; then
+  if [[ $scenario == logout-error ]]; then
+    printf 'Error: Synthetic logout failure\n' >&2
+    exit 1
+  fi
+  printf 'Successfully performed logout\n'
   exit 0
 fi
 

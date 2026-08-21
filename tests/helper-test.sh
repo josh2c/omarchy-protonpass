@@ -161,6 +161,14 @@ assert_invalid_helper copy copy --share-id share --item-id item --field password
 assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds 45 --unknown
 assert_invalid_helper lock lock extra
 assert_invalid_helper lock lock --unknown
+assert_invalid_helper logout logout extra
+assert_invalid_helper clear-now clear-now extra
+assert_invalid_helper recents recents
+assert_invalid_helper recents recents load extra
+assert_invalid_helper recents recents note
+assert_invalid_helper recents recents note --share-id share --item-id 'bad item'
+assert_invalid_helper recents recents note --share-id share --item-id item --share-id other
+assert_invalid_helper recents recents unknown
 calls_after_invalid=$(jq -sc 'length' "$MOCK_CALLS_LOG")
 assert_eq "$calls_before_invalid" "$calls_after_invalid" "validation completes before pass-cli execution"
 
@@ -176,6 +184,13 @@ copy_contract=$("$HELPER" copy --clear-seconds 0000 --field totp --item-id item_
 assert_jq '.schemaVersion == 1 and .command == "copy" and .state == "copied" and .field == "totp" and .fallbackUsed == false and .clearSeconds == 0' "$copy_contract" "copy contract"
 lock_stub=$("$HELPER" lock)
 assert_jq '.schemaVersion == 1 and .command == "lock" and .state == "locked" and (.message|type) == "string"' "$lock_stub" "lock contract"
+logout_stub=$("$HELPER" logout)
+assert_jq '.schemaVersion == 1 and .command == "logout" and .state == "logged-out-ok" and (.message|type) == "string"' "$logout_stub" "logout contract"
+clear_now_empty=$("$HELPER" clear-now)
+assert_jq '.schemaVersion == 1 and .command == "clear-now" and .state == "not-owner" and (.message|type) == "string"' "$clear_now_empty" "clear-now empty contract"
+rm -f -- "$XDG_STATE_HOME/omarchy-protonpass/recents.json"
+recents_empty=$("$HELPER" recents load)
+assert_jq '.schemaVersion == 1 and .command == "recents" and .state == "ok" and .recents == [] and (.message|type) == "string"' "$recents_empty" "recents empty contract"
 
 # Source only the helper's core functions; its guarded main must not execute.
 # shellcheck disable=SC1090
@@ -290,6 +305,42 @@ hash_value() {
   printf '%s' "$1" | sha256sum | cut -d' ' -f1
 }
 
+RECENTS_FILE="$XDG_STATE_HOME/omarchy-protonpass/recents.json"
+CLIP_HASH_FILE="$XDG_RUNTIME_DIR/omarchy-protonpass.clip"
+
+for recent_number in {1..9}; do
+  recent_note=$("$HELPER" recents note \
+    --share-id "share_recent_$recent_number" \
+    --item-id "item_recent_$recent_number")
+  assert_jq '.state == "ok" and (has("recents")|not)' "$recent_note" "recents note $recent_number"
+done
+recents_loaded=$("$HELPER" recents load)
+assert_jq '.state == "ok" and (.recents|length) == 8 and
+  .recents[0].shareId == "share_recent_9" and .recents[0].itemId == "item_recent_9" and
+  .recents[7].shareId == "share_recent_2" and
+  all(.recents[]; (keys|sort) == ["itemId","shareId","ts"] and (.ts|type) == "number")' \
+  "$recents_loaded" "recents prunes to eight most-recent entries"
+assert_eq "600" "$(stat -c '%a' "$RECENTS_FILE")" "recents file mode"
+assert_jq 'keys == ["recents"] and (.recents|length) == 8 and
+  all(.recents[]; (keys|sort) == ["itemId","shareId","ts"] and
+    (.shareId|test("^[A-Za-z0-9+/=_-]+$")) and
+    (.itemId|test("^[A-Za-z0-9+/=_-]+$")) and
+    (.ts|type) == "number")' "$(<"$RECENTS_FILE")" \
+  "recents file contains only opaque ids and timestamps"
+
+promoted_note=$("$HELPER" recents note --item-id item_recent_4 --share-id share_recent_4)
+assert_jq '.state == "ok"' "$promoted_note" "recents promote existing item"
+promoted_recents=$("$HELPER" recents load)
+assert_jq '(.recents|length) == 8 and .recents[0].shareId == "share_recent_4" and
+  .recents[0].itemId == "item_recent_4" and
+  ([.recents[] | select(.shareId == "share_recent_4" and .itemId == "item_recent_4")]|length) == 1' \
+  "$promoted_recents" "recents promotion is unique"
+
+printf '{"recents":[{"shareId":"share","itemId":"item","ts":1,"title":"forbidden"}]}\n' >"$RECENTS_FILE"
+malformed_recents=$("$HELPER" recents load)
+assert_jq '.state == "error" and .recents == []' "$malformed_recents" "recents rejects extra metadata"
+rm -f -- "$RECENTS_FILE"
+
 : >"$MOCK_CALLS_LOG"
 : >"$MOCK_WL_COPY_LOG"
 password_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
@@ -299,8 +350,38 @@ assert_jq '.schemaVersion == 1 and .command == "copy" and .state == "copied" and
 if [[ $password_copy == *synthetic-value* ]]; then fail "copy response contains secret value"; fi
 password_hash=$(hash_value synthetic-value)
 assert_jq ". == {args:[\"--sensitive\"],sha256:\"$password_hash\"}" "$(tail -n1 "$MOCK_WL_COPY_LOG")" "password copy bytes and sensitive argv"
+assert_eq "$password_hash" "$(<"$CLIP_HASH_FILE")" "copy writes clipboard ownership hash"
+assert_eq "600" "$(stat -c '%a' "$CLIP_HASH_FILE")" "clipboard hash file mode"
+if ! grep -Eq '^[0-9a-f]{64}$' "$CLIP_HASH_FILE"; then fail "clipboard hash file contains non-hash data"; fi
+assert_jq '.recents == [{shareId:"share_fixture_1",itemId:"item_fixture_1",ts:.recents[0].ts}] and
+  (.recents[0].ts|type) == "number"' "$(<"$RECENTS_FILE")" "copy records recent ids only"
 password_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
 assert_jq '. == [["item","view","--share-id","share_fixture_1","--item-id","item_fixture_1","--field","password"]]' "$password_calls" "password pass-cli argv"
+
+clear_now_match=$(MOCK_WL_PASTE_VALUE=synthetic-value "$HELPER" clear-now)
+assert_jq '.schemaVersion == 1 and .command == "clear-now" and .state == "cleared"' \
+  "$clear_now_match" "clear-now matching clipboard"
+[[ ! -e $CLIP_HASH_FILE ]] || fail "clear-now left clipboard hash file"
+assert_jq '.[-1].args == ["--clear"]' "$(jq -sc '.' "$MOCK_WL_COPY_LOG")" \
+  "clear-now clears matching clipboard"
+clear_now_again=$("$HELPER" clear-now)
+assert_jq '.state == "not-owner"' "$clear_now_again" "clear-now without ownership"
+
+: >"$MOCK_WL_COPY_LOG"
+mismatch_setup=$(MOCK_SCENARIO=ready "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 0)
+assert_jq '.state == "copied"' "$mismatch_setup" "clear-now mismatch setup"
+clear_now_mismatch=$(MOCK_WL_PASTE_VALUE='newer clipboard value' "$HELPER" clear-now)
+assert_jq '.state == "not-owner"' "$clear_now_mismatch" "clear-now preserves newer clipboard"
+assert_jq 'length == 1 and .[0].args == ["--sensitive"]' "$(jq -sc '.' "$MOCK_WL_COPY_LOG")" \
+  "clear-now does not clear mismatched clipboard"
+assert_eq "$password_hash" "$(<"$CLIP_HASH_FILE")" "mismatched clear retains ownership record"
+
+: >"$MOCK_WL_COPY_LOG"
+clear_now_failure=$(MOCK_WL_PASTE_VALUE=synthetic-value MOCK_WL_COPY_EXIT=1 "$HELPER" clear-now)
+assert_jq '.state == "error"' "$clear_now_failure" "clear-now wl-copy failure"
+[[ -f $CLIP_HASH_FILE ]] || fail "failed clear-now removed clipboard hash file"
 
 : >"$MOCK_WL_COPY_LOG"
 paste_once_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
@@ -402,6 +483,13 @@ wl_copy_failure=$(MOCK_SCENARIO=ready MOCK_WL_COPY_EXIT=1 "$HELPER" copy \
 assert_jq '.state == "error" and .message == "Copy failed — check connection and try again"' "$wl_copy_failure" "wl-copy failure"
 
 : >"$MOCK_WL_COPY_LOG"
+missing_runtime_copy=$(XDG_RUNTIME_DIR="$TEST_SANDBOX/not-a-runtime-dir" MOCK_SCENARIO=ready \
+  "$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 0)
+assert_jq '.state == "error"' "$missing_runtime_copy" "copy requires runtime hash storage"
+[[ ! -s $MOCK_WL_COPY_LOG ]] || fail "copy offered a secret without runtime hash ownership"
+
+: >"$MOCK_WL_COPY_LOG"
 : >"$MOCK_WL_PASTE_LOG"
 prompt_start=$EPOCHREALTIME
 prompt_copy=$(MOCK_SCENARIO=ready \
@@ -418,6 +506,7 @@ sleep 1.2
 matched_clear_calls=$(jq -sc '.' "$MOCK_WL_COPY_LOG")
 assert_jq 'length == 2 and .[0].args == ["--sensitive"] and .[1].args == ["--clear"]' "$matched_clear_calls" "matching clipboard is cleared"
 assert_jq 'length == 1 and .[0] == ["--no-newline"]' "$(jq -sc '.' "$MOCK_WL_PASTE_LOG")" "clearer reads clipboard without newline"
+[[ ! -e $CLIP_HASH_FILE ]] || fail "timed clear left clipboard hash file"
 
 : >"$MOCK_WL_COPY_LOG"
 : >"$MOCK_WL_PASTE_LOG"
@@ -427,6 +516,7 @@ newer_copy=$(MOCK_SCENARIO=ready MOCK_WL_PASTE_VALUE='newer clipboard value' \
 assert_jq '.state == "copied"' "$newer_copy" "newer-content copy setup"
 sleep 1.1
 assert_jq 'length == 1 and .[0].args == ["--sensitive"]' "$(jq -sc '.' "$MOCK_WL_COPY_LOG")" "newer clipboard content survives expiry"
+assert_eq "$password_hash" "$(<"$CLIP_HASH_FILE")" "newer clipboard keeps prior ownership hash"
 
 : >"$MOCK_WL_COPY_LOG"
 : >"$MOCK_WL_PASTE_LOG"
@@ -436,6 +526,7 @@ zero_clear_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
 assert_jq '.state == "copied" and .clearSeconds == 0' "$zero_clear_copy" "zero clear seconds"
 sleep 0.1
 [[ ! -s $MOCK_WL_PASTE_LOG ]] || fail "clearer spawned when clear seconds is zero"
+assert_eq "$password_hash" "$(<"$CLIP_HASH_FILE")" "zero-expiry copy retains clear-now ownership"
 
 : >"$MOCK_CALLS_LOG"
 locked_response=$(MOCK_SCENARIO=ready "$HELPER" lock)
@@ -446,11 +537,26 @@ assert_jq '.state == "no-lock" and (.message|contains("create-lock")) and (tostr
 offline_lock=$(MOCK_SCENARIO=offline "$HELPER" lock)
 assert_jq ".state == \"unreachable\" and .message == \"Can't reach Proton\"" "$offline_lock" "offline lock"
 
+: >"$MOCK_CALLS_LOG"
+logout_response=$(MOCK_SCENARIO=ready "$HELPER" logout)
+assert_jq '.schemaVersion == 1 and .command == "logout" and .state == "logged-out-ok"' \
+  "$logout_response" "logout success"
+assert_jq '. == [["logout"]]' "$(jq -sc '.' "$MOCK_CALLS_LOG")" "logout fixed pass-cli argv"
+already_logged_out=$(MOCK_SCENARIO=already-logged-out "$HELPER" logout)
+assert_jq '.state == "logged-out-ok"' "$already_logged_out" "logout is idempotent"
+offline_logout=$(MOCK_SCENARIO=offline "$HELPER" logout)
+assert_jq '.state == "unreachable"' "$offline_logout" "offline logout"
+failed_logout=$(MOCK_SCENARIO=logout-error "$HELPER" logout)
+assert_jq '.state == "error" and (tostring|contains("Synthetic logout failure")|not)' \
+  "$failed_logout" "logout sanitizes generic stderr"
+
 rm "$TEST_BIN/pass-cli"
 missing_copy_cli=$("$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0)
 assert_jq '.state == "cli-missing"' "$missing_copy_cli" "copy missing pass-cli"
 missing_lock_cli=$("$HELPER" lock)
 assert_jq '.state == "cli-missing"' "$missing_lock_cli" "lock missing pass-cli"
+missing_logout_cli=$("$HELPER" logout)
+assert_jq '.state == "cli-missing"' "$missing_logout_cli" "logout missing pass-cli"
 ln -s "$TEST_ROOT/tests/mocks/pass-cli" "$TEST_BIN/pass-cli"
 
 rm "$TEST_BIN/wl-copy"
@@ -461,6 +567,8 @@ ln -s "$TEST_ROOT/tests/mocks/wl-copy" "$TEST_BIN/wl-copy"
 rm "$TEST_BIN/wl-paste"
 missing_wl_paste=$("$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 1)
 assert_jq '.state == "error" and (.message|contains("Copy failed"))' "$missing_wl_paste" "timed copy missing wl-paste"
+missing_wl_paste_clear=$("$HELPER" clear-now)
+assert_jq '.state == "error"' "$missing_wl_paste_clear" "clear-now missing wl-paste"
 ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
 
 run_shared_matrix_case() {
@@ -505,6 +613,23 @@ for matrix_row in \
   run_shared_matrix_case index "$matrix_scenario" "$index_state"
   run_shared_matrix_case copy "$matrix_scenario" "$copy_state"
   run_shared_matrix_case lock "$matrix_scenario" "$lock_state"
+done
+
+for logout_row in \
+  'ready:logged-out-ok' \
+  'logged-out:logged-out-ok' \
+  'expired:logged-out-ok' \
+  'locked:error' \
+  'offline:unreachable' \
+  'timeout-sleeps:unreachable'; do
+  IFS=: read -r logout_scenario logout_state <<<"$logout_row"
+  if [[ $logout_scenario == timeout-sleeps ]]; then
+    logout_matrix=$(MOCK_SCENARIO=$logout_scenario MOCK_TIMEOUT_EXIT=1 "$HELPER" logout)
+  else
+    logout_matrix=$(MOCK_SCENARIO=$logout_scenario "$HELPER" logout)
+  fi
+  assert_jq ".schemaVersion == 1 and .command == \"logout\" and .state == \"$logout_state\"" \
+    "$logout_matrix" "logout $logout_scenario matrix contract"
 done
 
 printf 'helper and mock harness tests passed\n'

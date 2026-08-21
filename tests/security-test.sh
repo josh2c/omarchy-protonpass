@@ -27,6 +27,9 @@ fail_on_match '(^|[[:space:]])(ba|da|k|z)?sh[[:space:]]+-c([[:space:]]|$)' \
   "runtime source launches a shell command string"
 fail_on_match 'export[[:space:]]+(-[A-Za-z]+[[:space:]]+)*val([[:space:]=]|$)' \
   "the secret variable can be exported"
+if grep -En -- '^[[:space:]]*export([[:space:]]|$)' "$HELPER" >/dev/null; then
+  fail "helper exports environment variables"
+fi
 fail_on_match 'property[[:space:]]+(string|var)[[:space:]]+_?(secret|password|username|totp)(value|text|code|data)?[[:space:]:]' \
   "QML declares a property that could retain a secret"
 
@@ -78,6 +81,11 @@ done
 if proc_file_contains_marker "/proc/$helper_pid/environ"; then
   fail "secret marker appeared in the helper environment"
 fi
+for internal_name in CLIP_HASH RECENTS_DATA RECENTS_SHARE_ID RECENTS_ITEM_ID; do
+  if grep -Fzq -- "$internal_name=" "/proc/$helper_pid/environ" 2>/dev/null; then
+    fail "helper exported internal storage variable: $internal_name"
+  fi
+done
 
 wait "$helper_pid"
 [[ ! -s $TEST_SANDBOX/security.stderr ]] || fail "copy helper wrote stderr"
@@ -95,6 +103,30 @@ assert_jq 'length == 1 and .[0].args == ["--sensitive"]' "$wl_copy_calls" \
 expected_hash=$(printf '%s' "$MARKER" | sha256sum | cut -d' ' -f1)
 assert_jq ".[0].sha256 == \"$expected_hash\"" "$wl_copy_calls" \
   "wl-copy did not receive the exact secret bytes"
+
+clip_hash_file="$XDG_RUNTIME_DIR/omarchy-protonpass.clip"
+[[ -f $clip_hash_file && ! -L $clip_hash_file ]] || fail "clipboard hash file is missing or unsafe"
+assert_eq "600" "$(stat -c '%a' "$clip_hash_file")" "clipboard hash file mode"
+assert_eq "$expected_hash" "$(<"$clip_hash_file")" "clipboard hash file content"
+if ! grep -Eq '^[0-9a-f]{64}$' "$clip_hash_file"; then
+  fail "clipboard ownership file contains data besides one hash"
+fi
+
+recents_file="$XDG_STATE_HOME/omarchy-protonpass/recents.json"
+[[ -f $recents_file && ! -L $recents_file ]] || fail "recents file is missing or unsafe"
+assert_eq "600" "$(stat -c '%a' "$recents_file")" "recents file mode"
+assert_jq 'keys == ["recents"] and (.recents|length) == 1 and
+  all(.recents[]; (keys|sort) == ["itemId","shareId","ts"] and
+    (.itemId|type) == "string" and (.shareId|type) == "string" and
+    (.ts|type) == "number")' "$(<"$recents_file")" \
+  "recents file contains only ids and timestamps"
+
+: >"$MOCK_CALLS_LOG"
+logout_response=$(MOCK_SCENARIO=ready "$HELPER" logout)
+assert_jq '.command == "logout" and .state == "logged-out-ok"' "$logout_response" \
+  "logout security contract"
+assert_jq '. == [["logout"]]' "$(jq -sc '.' "$MOCK_CALLS_LOG")" \
+  "logout uses fixed argv"
 
 while IFS= read -r -d '' sandbox_file; do
   if regular_file_contains_marker "$sandbox_file"; then

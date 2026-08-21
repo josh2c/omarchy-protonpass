@@ -5,6 +5,11 @@ readonly DOCTOR_TIMEOUT_SECONDS=5
 readonly INDEX_TIMEOUT_SECONDS=20
 readonly COPY_TIMEOUT_SECONDS=15
 readonly LOCK_TIMEOUT_SECONDS=15
+readonly LOGOUT_TIMEOUT_SECONDS=15
+readonly CLIP_HASH_BASENAME=omarchy-protonpass.clip
+readonly RECENTS_DIRNAME=omarchy-protonpass
+readonly RECENTS_BASENAME=recents.json
+readonly RECENTS_LIMIT=8
 
 emit_dispatch_error() {
   jq -cn '{
@@ -98,6 +103,30 @@ emit_lock() {
     state: $state,
     message: $message
   }'
+}
+
+emit_simple() {
+  local command_name=$1 state=$2 message=$3
+  jq -cn --arg command "$command_name" --arg state "$state" --arg message "$message" '{
+    schemaVersion: 1,
+    command: $command,
+    state: $state,
+    message: $message
+  }'
+}
+
+emit_recents() {
+  local state=$1 message=$2 recents=$3
+  jq -cn \
+    --arg state "$state" \
+    --arg message "$message" \
+    --argjson recents "$recents" '{
+      schemaVersion: 1,
+      command: "recents",
+      state: $state,
+      message: $message,
+      recents: $recents
+    }'
 }
 
 run_pass_cli() {
@@ -246,6 +275,109 @@ normalize_clear_seconds() {
   NORMALIZED_CLEAR_SECONDS=$((10#$normalized))
 }
 
+clip_hash_path() {
+  local runtime_dir=${XDG_RUNTIME_DIR:-}
+  [[ -n $runtime_dir && -d $runtime_dir && ! -L $runtime_dir ]] || return 1
+  printf '%s/%s' "$runtime_dir" "$CLIP_HASH_BASENAME"
+}
+
+read_clip_hash() {
+  local path hash
+  path=$(clip_hash_path) || return 1
+  [[ -f $path && ! -L $path ]] || return 1
+  hash=$(<"$path")
+  [[ $hash =~ ^[0-9a-f]{64}$ ]] || return 2
+  CLIP_HASH=$hash
+}
+
+write_clip_hash() {
+  local hash=$1 path temporary
+  [[ $hash =~ ^[0-9a-f]{64}$ ]] || return 1
+  path=$(clip_hash_path) || return 1
+  umask 077
+  temporary=$(mktemp "${path}.XXXXXX") || return 1
+  if ! printf '%s\n' "$hash" >"$temporary" ||
+     ! chmod 600 "$temporary" ||
+     ! mv -f -- "$temporary" "$path"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+}
+
+remove_clip_hash_if_matches() {
+  local expected=$1 path
+  path=$(clip_hash_path) || return 0
+  if read_clip_hash && [[ $CLIP_HASH == "$expected" ]]; then
+    rm -f -- "$path"
+  fi
+}
+
+recents_path() {
+  local state_home=${XDG_STATE_HOME:-}
+  if [[ -z $state_home ]]; then
+    [[ -n ${HOME:-} ]] || return 1
+    state_home=$HOME/.local/state
+  fi
+  printf '%s/%s/%s' "$state_home" "$RECENTS_DIRNAME" "$RECENTS_BASENAME"
+}
+
+load_recents_data() {
+  local path loaded
+  path=$(recents_path) || return 1
+  if [[ ! -e $path ]]; then
+    RECENTS_DATA='[]'
+    return 0
+  fi
+  [[ -f $path && ! -L $path ]] || return 1
+  loaded=$(jq -ce --argjson limit "$RECENTS_LIMIT" '
+    select(
+      type == "object" and (keys == ["recents"]) and
+      (.recents | type == "array" and length <= $limit) and
+      all(.recents[];
+        (keys | sort) == ["itemId", "shareId", "ts"] and
+        (.shareId | type == "string" and test("^[A-Za-z0-9+/=_-]{1,256}$")) and
+        (.itemId | type == "string" and test("^[A-Za-z0-9+/=_-]{1,256}$")) and
+        (.ts | type == "number" and . >= 0 and floor == .)
+      )
+    ) | .recents
+  ' "$path" 2>/dev/null) || return 1
+  RECENTS_DATA=$loaded
+}
+
+write_recents_data() {
+  local recents=$1 path directory temporary
+  path=$(recents_path) || return 1
+  directory=${path%/*}
+  [[ ! -L $directory ]] || return 1
+  umask 077
+  mkdir -p -- "$directory" || return 1
+  chmod 700 "$directory" || return 1
+  temporary=$(mktemp "$directory/.recents.json.XXXXXX") || return 1
+  if ! jq -cn --argjson recents "$recents" '{recents: $recents}' >"$temporary" ||
+     ! chmod 600 "$temporary" ||
+     ! mv -f -- "$temporary" "$path"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+}
+
+note_recent() {
+  local share_id=$1 item_id=$2 timestamp updated
+  load_recents_data || return 1
+  timestamp=$(date +%s) || return 1
+  [[ $timestamp =~ ^[0-9]+$ ]] || return 1
+  updated=$(jq -cn \
+    --arg shareId "$share_id" \
+    --arg itemId "$item_id" \
+    --argjson ts "$timestamp" \
+    --argjson recents "$RECENTS_DATA" \
+    --argjson limit "$RECENTS_LIMIT" '
+      ([{shareId: $shareId, itemId: $itemId, ts: $ts}] +
+       [$recents[] | select(.shareId != $shareId or .itemId != $itemId)])[:$limit]
+    ') || return 1
+  write_recents_data "$updated"
+}
+
 doctor_command() {
   local pass_present=false clipboard_present=false
   local version="" version_output="" message="Dependencies are available"
@@ -346,6 +478,44 @@ parse_copy_args() {
   COPY_PASTE_ONCE=$paste_once
 }
 
+parse_recents_args() {
+  local operation=${1:-}
+  case $operation in
+    load)
+      (( $# == 1 )) || return 2
+      RECENTS_OPERATION=load
+      ;;
+    note)
+      shift
+      local share_id="" item_id="" seen_share=false seen_item=false
+      while (( $# > 0 )); do
+        case $1 in
+          --share-id)
+            if [[ $seen_share == true || $# -lt 2 ]]; then return 2; fi
+            share_id=$2
+            seen_share=true
+            shift 2
+            ;;
+          --item-id)
+            if [[ $seen_item == true || $# -lt 2 ]]; then return 2; fi
+            item_id=$2
+            seen_item=true
+            shift 2
+            ;;
+          *) return 2 ;;
+        esac
+      done
+      [[ $seen_share == true && $seen_item == true ]] || return 2
+      valid_id "$share_id" || return 2
+      valid_id "$item_id" || return 2
+      RECENTS_OPERATION=note
+      RECENTS_SHARE_ID=$share_id
+      RECENTS_ITEM_ID=$item_id
+      ;;
+    *) return 2 ;;
+  esac
+}
+
 index_command() {
   local vault_stdout="" vault_stderr="" vaults="[]" items="[]" warnings="[]"
   local vault_status=0 vault_json share_id item_stdout item_stderr item_status mapped
@@ -428,7 +598,7 @@ index_command() {
 }
 
 copy_command() {
-  local +x val="" stderr_blob="" status=0 fallback_used=false hash secs cur
+  local +x val="" stderr_blob="" status=0 fallback_used=false hash secs cur stored
   local -a copy_args=(--sensitive)
 
   if ! command -v pass-cli >/dev/null 2>&1; then
@@ -526,27 +696,98 @@ copy_command() {
       ;;
   esac
 
-  if [[ $COPY_PASTE_ONCE == true ]]; then copy_args+=(-o); fi
-  if ! printf '%s' "$val" | wl-copy "${copy_args[@]}" >/dev/null 2>&1; then
+  hash=$(printf '%s' "$val" | sha256sum | cut -d' ' -f1)
+  if ! write_clip_hash "$hash"; then
     unset val
     emit_copy error "Copy failed — check connection and try again" \
       "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
     return 0
   fi
-  hash=$(printf '%s' "$val" | sha256sum | cut -d' ' -f1)
+
+  if [[ $COPY_PASTE_ONCE == true ]]; then copy_args+=(-o); fi
+  if ! printf '%s' "$val" | wl-copy "${copy_args[@]}" >/dev/null 2>&1; then
+    unset val
+    remove_clip_hash_if_matches "$hash"
+    emit_copy error "Copy failed — check connection and try again" \
+      "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+    return 0
+  fi
   unset val
+
+  # Recent metadata is fail-soft so a copied value is never reported as a failure.
+  note_recent "$COPY_SHARE_ID" "$COPY_ITEM_ID" || true
 
   if (( COPY_CLEAR_SECONDS > 0 )); then
     secs=$COPY_CLEAR_SECONDS
     ( exec >/dev/null 2>&1 </dev/null
       sleep "$secs"
+      read_clip_hash || exit 0
+      stored=$CLIP_HASH
+      [ "$stored" = "$hash" ] || exit 0
       cur=$(wl-paste --no-newline 2>/dev/null | sha256sum | cut -d' ' -f1)
-      [ "$cur" = "$hash" ] && wl-copy --clear ) &
+      if [ "$cur" = "$hash" ] &&
+         read_clip_hash && [ "$CLIP_HASH" = "$hash" ] &&
+         wl-copy --clear; then
+        remove_clip_hash_if_matches "$hash"
+      fi ) &
     disown
   fi
 
   emit_copy copied "Copied to clipboard" \
     "$COPY_FIELD" "$fallback_used" "$COPY_CLEAR_SECONDS"
+}
+
+clear_now_command() {
+  local hash cur read_status=0
+
+  read_clip_hash || read_status=$?
+  if (( read_status != 0 )); then
+    case $read_status in
+      1) emit_simple clear-now not-owner "Clipboard is not owned by Proton Pass" ;;
+      *) emit_simple clear-now error "Could not verify the clipboard" ;;
+    esac
+    return 0
+  fi
+  hash=$CLIP_HASH
+
+  if ! command -v wl-copy >/dev/null 2>&1 || ! command -v wl-paste >/dev/null 2>&1; then
+    emit_simple clear-now error "Could not clear the clipboard"
+    return 0
+  fi
+  if ! cur=$(wl-paste --no-newline 2>/dev/null | sha256sum | cut -d' ' -f1); then
+    emit_simple clear-now error "Could not verify the clipboard"
+    return 0
+  fi
+  if [[ $cur != "$hash" ]]; then
+    emit_simple clear-now not-owner "Clipboard is not owned by Proton Pass"
+    return 0
+  fi
+  if ! read_clip_hash || [[ $CLIP_HASH != "$hash" ]] || ! wl-copy --clear >/dev/null 2>&1; then
+    emit_simple clear-now error "Could not clear the clipboard"
+    return 0
+  fi
+
+  remove_clip_hash_if_matches "$hash"
+  emit_simple clear-now cleared "Clipboard cleared"
+}
+
+recents_command() {
+  case $RECENTS_OPERATION in
+    load)
+      if load_recents_data; then
+        emit_recents ok "Recent items ready" "$RECENTS_DATA"
+      else
+        emit_recents error "Could not load recent items" '[]'
+      fi
+      ;;
+    note)
+      if note_recent "$RECENTS_SHARE_ID" "$RECENTS_ITEM_ID"; then
+        emit_simple recents ok "Recent item saved"
+      else
+        emit_simple recents error "Could not save recent item"
+      fi
+      ;;
+  esac
 }
 
 lock_command() {
@@ -567,6 +808,31 @@ lock_command() {
     classify_failure lock "$status" "$stderr_blob"
     emit_lock "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
   fi
+}
+
+logout_command() {
+  local stdout="" stderr_blob="" status=0
+
+  if ! command -v pass-cli >/dev/null 2>&1; then
+    emit_simple logout cli-missing "Proton Pass CLI not found"
+    return 0
+  fi
+
+  run_pass_cli_captured stdout stderr_blob status \
+    "$LOGOUT_TIMEOUT_SECONDS" logout
+  : "$stdout"
+  if (( status == 0 )); then
+    emit_simple logout logged-out-ok "Signed out of Proton Pass"
+    return 0
+  fi
+
+  classify_failure logout "$status" "$stderr_blob"
+  case $CLASSIFIED_STATE in
+    logged-out) emit_simple logout logged-out-ok "Already signed out of Proton Pass" ;;
+    cli-missing) emit_simple logout cli-missing "$CLASSIFIED_MESSAGE" ;;
+    unreachable) emit_simple logout unreachable "$CLASSIFIED_MESSAGE" ;;
+    *) emit_simple logout error "Could not sign out of Proton Pass" ;;
+  esac
 }
 
 main() {
@@ -594,6 +860,18 @@ main() {
     lock)
       if (( $# != 0 )); then emit_command_error lock; return 2; fi
       lock_command
+      ;;
+    logout)
+      if (( $# != 0 )); then emit_command_error logout; return 2; fi
+      logout_command
+      ;;
+    clear-now)
+      if (( $# != 0 )); then emit_command_error clear-now; return 2; fi
+      clear_now_command
+      ;;
+    recents)
+      if ! parse_recents_args "$@"; then emit_command_error recents; return 2; fi
+      recents_command
       ;;
     *)
       emit_dispatch_error
