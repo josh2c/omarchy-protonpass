@@ -101,6 +101,9 @@ assert_not_contains 'console.log(' \
 assert_panel_contains() {
   [[ $PANEL_SOURCE == *"$1"* ]] || fail "$2"
 }
+assert_panel_not_contains() {
+  [[ $PANEL_SOURCE != *"$1"* ]] || fail "$2"
+}
 
 assert_panel_contains 'focusTarget: search' \
   "the panel does not open into search focus"
@@ -161,10 +164,16 @@ for action in username password 'TOTP code'; do
   assert_panel_contains "Accessible.name: \"Copy $action\"" \
     "the Copy $action icon button lacks an accessible name"
 done
-for shortcut_action in copy-username copy-password copy-totp clear-clipboard; do
-  assert_panel_contains "root.shortcutLabel(\"$shortcut_action\")" \
-    "the $shortcut_action UI does not use the effective shortcut label"
-done
+assert_panel_not_contains 'function shortcutLabel(' \
+  "the removed shortcut-label UI helper is still present"
+assert_panel_not_contains 'tooltipText: "Copy username' \
+  "the username action still exposes shortcut hover chrome"
+assert_panel_not_contains 'tooltipText: "Copy password' \
+  "the password action still exposes shortcut hover chrome"
+assert_panel_not_contains 'tooltipText: "Copy TOTP code' \
+  "the TOTP action still exposes shortcut hover chrome"
+assert_panel_not_contains 'u/p/t in list' \
+  "the footer key legend is still present"
 assert_panel_contains 'iconText: ""' \
   "the username action does not use the Nerd Font person icon"
 assert_panel_contains 'iconText: ""' \

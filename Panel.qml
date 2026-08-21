@@ -79,10 +79,6 @@ Panel {
     svc.copy(selectedItem.shareId, selectedItem.itemId, field)
   }
 
-  function shortcutLabel(action) {
-    return Keybinds.display(keybindConfiguration.preferred[String(action || "")] || "")
-  }
-
   function chordForEvent(event) {
     var allowedModifiers = Qt.ControlModifier | Qt.ShiftModifier | Qt.AltModifier
     if ((event.modifiers & ~allowedModifiers) !== 0)
@@ -597,7 +593,6 @@ Panel {
 
                     PanelActionButton {
                       iconText: ""
-                      tooltipText: "Copy username · " + root.shortcutLabel("copy-username")
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       enabled: !svc.copyBusy
@@ -605,18 +600,8 @@ Panel {
                       Accessible.name: "Copy username"
                       onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "username")
                     }
-                    Text {
-                      visible: loginRow.hasCursor
-                      text: root.shortcutLabel("copy-username")
-                      textFormat: Text.PlainText
-                      color: root.dim
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      anchors.verticalCenter: parent.verticalCenter
-                    }
                     PanelActionButton {
                       iconText: ""
-                      tooltipText: "Copy password · " + root.shortcutLabel("copy-password")
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       enabled: !svc.copyBusy
@@ -624,33 +609,14 @@ Panel {
                       Accessible.name: "Copy password"
                       onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "password")
                     }
-                    Text {
-                      visible: loginRow.hasCursor
-                      text: root.shortcutLabel("copy-password")
-                      textFormat: Text.PlainText
-                      color: root.dim
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      anchors.verticalCenter: parent.verticalCenter
-                    }
                     PanelActionButton {
                       iconText: ""
-                      tooltipText: "Copy TOTP code · " + root.shortcutLabel("copy-totp")
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       enabled: !svc.copyBusy
                       Accessible.role: Accessible.Button
                       Accessible.name: "Copy TOTP code"
                       onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "totp")
-                    }
-                    Text {
-                      visible: loginRow.hasCursor
-                      text: root.shortcutLabel("copy-totp")
-                      textFormat: Text.PlainText
-                      color: root.dim
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      anchors.verticalCenter: parent.verticalCenter
                     }
                   }
                 }
@@ -967,21 +933,6 @@ Panel {
                 text: svc.staleWarning ? "Showing cached list — refresh failed" : "Refreshing…"
                 textFormat: Text.PlainText
                 color: svc.staleWarning ? root.urgent : root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WordWrap
-              }
-
-              Text {
-                width: parent.width
-                text: root.shortcutLabel("copy-username") + "/"
-                  + root.shortcutLabel("copy-password") + "/"
-                  + root.shortcutLabel("copy-totp") + " copy · "
-                  + root.shortcutLabel("clear-clipboard") + " clear · "
-                  + root.shortcutLabel("lock") + " lock · "
-                  + root.shortcutLabel("refresh") + " refresh · u/p/t in list"
-                textFormat: Text.PlainText
-                color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 wrapMode: Text.WordWrap
