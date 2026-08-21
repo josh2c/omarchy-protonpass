@@ -24,7 +24,14 @@ Item {
     property bool staleWarning: false
     property bool panelOpen: false
     readonly property var filteredItems: filterItems(items, query)
+    readonly property bool showRecents: boolSetting("showRecents", true)
+    readonly property var recentItems: joinRecents(items, recents)
+    readonly property bool displayingRecents: showRecents && query === "" && recentItems.length > 0
+    readonly property var recentRows: displayingRecents ? displayRows(recentItems, 0) : []
+    readonly property var allRows: displayRows(filteredItems, recentRows.length)
+    readonly property var displayItems: recentRows.concat(allRows)
     readonly property bool hasIndex: _hasIndex
+    property var recents: []
 
     property bool _hasIndex: false
     property bool _doctorReady: false
@@ -37,6 +44,9 @@ Item {
     property string _copyStdout: ""
     property string _clearClipboardStdout: ""
     property string _lockStdout: ""
+    property string _recentsStdout: ""
+    property string _recentsOperation: ""
+    property string _pendingRecentsOperation: ""
 
     signal toastRequested(string message)
 
@@ -77,6 +87,36 @@ Item {
         });
     }
 
+    function joinRecents(source, recentMetadata) {
+        if (!showRecents || !Array.isArray(source) || !Array.isArray(recentMetadata))
+            return [];
+        var joined = [];
+        for (var i = 0; i < recentMetadata.length && joined.length < 8; i++) {
+            var recent = recentMetadata[i];
+            for (var j = 0; j < source.length; j++) {
+                if (source[j].shareId === recent.shareId && source[j].itemId === recent.itemId) {
+                    joined.push(source[j]);
+                    break;
+                }
+            }
+        }
+        return joined;
+    }
+
+    function displayRows(source, offset) {
+        var rows = [];
+        for (var i = 0; i < source.length; i++) {
+            rows.push({
+                itemId: source[i].itemId,
+                shareId: source[i].shareId,
+                vaultName: source[i].vaultName,
+                title: source[i].title,
+                cursorIndex: offset + i
+            });
+        }
+        return rows;
+    }
+
     function _isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
@@ -97,7 +137,8 @@ Item {
             index: ["ready", "cli-missing", "logged-out", "locked", "unreachable", "error"],
             copy: ["copied", "no-field", "cli-missing", "logged-out", "locked", "unreachable", "error"],
             lock: ["locked", "no-lock", "cli-missing", "logged-out", "unreachable", "error"],
-            "clear-now": ["cleared", "not-owner", "error"]
+            "clear-now": ["cleared", "not-owner", "error"],
+            recents: ["ok", "error"]
         };
         return states[commandName] !== undefined && states[commandName].indexOf(responseState) !== -1;
     }
@@ -151,6 +192,23 @@ Item {
                     || data.clearSeconds < 0
                     || data.clearSeconds > 300)
                 return null;
+        } else if (expectedCommand === "recents" && data.recents !== undefined) {
+            if (!Array.isArray(data.recents) || data.recents.length > 8)
+                return null;
+            for (var recentIndex = 0; recentIndex < data.recents.length; recentIndex++) {
+                var recent = data.recents[recentIndex];
+                if (!_isObject(recent)
+                        || Object.keys(recent).sort().join(",") !== "itemId,shareId,ts"
+                        || typeof recent.shareId !== "string"
+                        || typeof recent.itemId !== "string"
+                        || !/^[A-Za-z0-9+/=_-]{1,256}$/.test(recent.shareId)
+                        || !/^[A-Za-z0-9+/=_-]{1,256}$/.test(recent.itemId)
+                        || typeof recent.ts !== "number"
+                        || !isFinite(recent.ts)
+                        || Math.floor(recent.ts) !== recent.ts
+                        || recent.ts < 0)
+                    return null;
+            }
         }
 
         return data;
@@ -171,6 +229,7 @@ Item {
         if (indexProcess.running)
             indexProcess.running = false;
         items = [];
+        recents = [];
         warnings = [];
         _hasIndex = false;
         refreshing = false;
@@ -254,6 +313,8 @@ Item {
         if (panelOpen)
             return;
         panelOpen = true;
+        if (showRecents)
+            runRecents("load");
 
         if (state === "MISSING_DEPS") {
             runDoctor(true);
@@ -279,7 +340,7 @@ Item {
             indexProcess.running = false;
         }
         refreshing = false;
-        // Copy and lock processes intentionally continue to completion.
+        // Copy, lock, and recents processes intentionally continue to completion.
     }
 
     function copy(shareId, itemId, field) {
@@ -337,6 +398,30 @@ Item {
         return true;
     }
 
+    function runRecents(operation) {
+        if (["load", "clear"].indexOf(operation) === -1)
+            return false;
+        if (recentsProcess.running) {
+            _pendingRecentsOperation = operation;
+            return true;
+        }
+        _recentsOperation = operation;
+        _recentsStdout = "";
+        recentsProcess.command = [helperPath(), "recents", operation];
+        recentsProcess.running = true;
+        return true;
+    }
+
+    function syncRecentsSetting() {
+        if (showRecents) {
+            if (panelOpen)
+                runRecents("load");
+        } else {
+            recents = [];
+            runRecents("clear");
+        }
+    }
+
     function _copyToast(response) {
         if (response.state === "no-field") {
             return response.field === "totp"
@@ -367,7 +452,12 @@ Item {
         }
     }
 
-    Component.onCompleted: root.runDoctor(false)
+    Component.onCompleted: {
+        root.runDoctor(false);
+        root.syncRecentsSetting();
+    }
+
+    onShowRecentsChanged: root.syncRecentsSetting()
 
     Process {
         id: doctorProcess
@@ -480,6 +570,8 @@ Item {
                 root._startClipboardCountdown(response.clearSeconds);
             if (root.panelOpen)
                 root.toastRequested(root._copyToast(response));
+            if (response.state === "copied" && root.showRecents && root.panelOpen)
+                root.runRecents("load");
         }
         stdout: StdioCollector {
             id: copyOutput
@@ -545,6 +637,32 @@ Item {
             id: lockOutput
             waitForEnd: true
             onStreamFinished: root._lockStdout = text
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: recentsProcess
+        running: false
+        command: []
+        onExited: function(exitCode) {
+            var operation = root._recentsOperation;
+            var response = root._validatedResponse(String(recentsOutput.text || root._recentsStdout || ""), "recents");
+            if (exitCode === 0 && response !== null && response.state === "ok") {
+                if (operation === "load" && Array.isArray(response.recents) && root.showRecents)
+                    root.recents = response.recents.slice(0, 8);
+                else if (operation === "clear")
+                    root.recents = [];
+            }
+            var pending = root._pendingRecentsOperation;
+            root._pendingRecentsOperation = "";
+            if (pending !== "")
+                Qt.callLater(function() { root.runRecents(pending); });
+        }
+        stdout: StdioCollector {
+            id: recentsOutput
+            waitForEnd: true
+            onStreamFinished: root._recentsStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }

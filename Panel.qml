@@ -26,14 +26,14 @@ Panel {
   readonly property var effectiveKeybinds: keybindConfiguration.bindings
 
   readonly property var selectedItem: {
-    var rows = svc.filteredItems
+    var rows = svc.displayItems
     if (!rows || rows.length === 0) return null
     return rows[Math.max(0, Math.min(cursorIndex, rows.length - 1))]
   }
   readonly property bool needsAttention: ["MISSING_DEPS", "LOGGED_OUT", "LOCKED"].indexOf(svc.state) !== -1
 
   function ensureCursor() {
-    var count = svc.filteredItems.length
+    var count = svc.displayItems.length
     if (count === 0) {
       cursorActive = false
       cursorIndex = 0
@@ -43,7 +43,7 @@ Panel {
   }
 
   function moveCursor(delta) {
-    var count = svc.filteredItems.length
+    var count = svc.displayItems.length
     if (count === 0) return
     if (!cursorActive) {
       cursorActive = true
@@ -56,7 +56,10 @@ Panel {
 
   function scrollCursorIntoView() {
     Qt.callLater(function() {
-      var row = itemRepeater.itemAt(root.cursorIndex)
+      var recentCount = svc.recentRows.length
+      var row = root.cursorIndex < recentCount
+        ? recentRepeater.itemAt(root.cursorIndex)
+        : itemRepeater.itemAt(root.cursorIndex - recentCount)
       if (!row || !panelFlick) return
       var point = row.mapToItem(panelFlick.contentItem, 0, 0)
       var margin = Style.space(8)
@@ -199,6 +202,7 @@ Panel {
     target: svc
     function onToastRequested(message) { root.showToast(message) }
     function onFilteredItemsChanged() { root.ensureCursor() }
+    function onDisplayItemsChanged() { root.ensureCursor() }
     function onStateChanged() {
       if (root.opened && svc.state === "READY")
         Qt.callLater(function() { search.forceActiveFocus() })
@@ -456,17 +460,54 @@ Panel {
               horizontalAlignment: Text.AlignHCenter
             }
 
+            Text {
+              visible: svc.displayingRecents
+              width: parent.width
+              topPadding: Style.space(8)
+              leftPadding: Style.space(10)
+              text: "Recent"
+              textFormat: Text.PlainText
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+
+            Repeater {
+              id: recentRepeater
+              model: svc.recentRows
+              delegate: loginRowDelegate
+            }
+
+            Text {
+              visible: svc.query === "" && svc.items.length > 0
+              width: parent.width
+              topPadding: svc.displayingRecents ? Style.space(8) : 0
+              leftPadding: Style.space(10)
+              text: "All"
+              textFormat: Text.PlainText
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+
             Repeater {
               id: itemRepeater
-              model: svc.filteredItems
+              model: svc.allRows
+              delegate: loginRowDelegate
+            }
 
-              delegate: CursorSurface {
+            Component {
+              id: loginRowDelegate
+
+              CursorSurface {
                 id: loginRow
                 required property var modelData
                 required property int index
                 width: parent.width
                 implicitHeight: rowContent.implicitHeight + Style.space(14)
-                hasCursor: root.cursorActive && root.cursorIndex === index
+                hasCursor: root.cursorActive && root.cursorIndex === modelData.cursorIndex
                 foreground: root.foreground
 
                 MouseArea {
@@ -474,11 +515,11 @@ Panel {
                   hoverEnabled: true
                   onEntered: {
                     root.cursorActive = true
-                    root.cursorIndex = loginRow.index
+                    root.cursorIndex = loginRow.modelData.cursorIndex
                   }
                   onClicked: {
                     root.cursorActive = true
-                    root.cursorIndex = loginRow.index
+                    root.cursorIndex = loginRow.modelData.cursorIndex
                     keyCatcher.forceActiveFocus()
                   }
                 }

@@ -14,7 +14,7 @@
     "category": "Security",
     "allowMultiple": false,
     "defaultSection": "right",
-    "defaults": { "clipboardClearSeconds": 45, "pasteOnce": false, "excludeVaults": "", "keybinds": "" },
+    "defaults": { "clipboardClearSeconds": 45, "pasteOnce": false, "excludeVaults": "", "keybinds": "", "showRecents": true },
     "schema": [
       { "key": "clipboardClearSeconds", "type": "integer", "label": "Clear clipboard after (seconds)",
         "description": "0 disables automatic clearing.", "defaultValue": 45, "min": 0, "max": 300, "step": 5 },
@@ -23,7 +23,9 @@
       { "key": "excludeVaults", "type": "string", "label": "Excluded vaults",
         "description": "Comma-separated vault names to hide from search.", "defaultValue": "" },
       { "key": "keybinds", "type": "string", "label": "Keyboard shortcuts",
-        "description": "Comma-separated chord:action overrides.", "defaultValue": "" }
+        "description": "Comma-separated chord:action overrides.", "defaultValue": "" },
+      { "key": "showRecents", "type": "boolean", "label": "Show recent items",
+        "description": "Show recently copied logins before searching. Disabling deletes stored recent-item metadata.", "defaultValue": true }
     ]
   }
 }

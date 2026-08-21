@@ -43,7 +43,7 @@ assert_contains 'if (responseGeneration !== root._indexGeneration)' \
   "stale index responses are not discarded"
 assert_contains $'if (indexProcess.running) {\n            // Invalidate before SIGTERM so onExited cannot publish stale data.\n            _indexGeneration++;\n            indexProcess.running = false;' \
   "closing the panel does not invalidate and stop an index request"
-assert_contains '// Copy and lock processes intentionally continue to completion.' \
+assert_contains '// Copy, lock, and recents processes intentionally continue to completion.' \
   "panel close no longer documents the copy lifecycle boundary"
 assert_contains $'// An auth transition is authoritative. Invalidate any older index so\n        // it cannot repopulate metadata after logout, lock, or session expiry.\n        _indexGeneration++;' \
   "auth transitions do not invalidate in-flight index metadata"
@@ -59,7 +59,7 @@ assert_contains 'root.items = cleanItems;' \
   "successful index refreshes do not atomically swap the model"
 assert_contains 'root.staleWarning = true;' \
   "failed background refreshes do not mark the cached model stale"
-assert_contains 'Component.onCompleted: root.runDoctor(false)' \
+assert_contains 'root.runDoctor(false);' \
   "doctor does not run at widget activation"
 assert_contains 'indexProcess.command = [helperPath(), "index", "--exclude-vaults"' \
   "index arguments are not passed as an argv array"
@@ -79,9 +79,9 @@ assert_contains 'root.lastSuccessfulIndexAt = Date.now();' \
   "the last successful index time is not recorded client-side"
 assert_contains 'waitForEnd: true' \
   "process output collectors are not waiting for complete responses"
-[[ $(grep -c '^    Process {' "$ROOT/Service.qml") -eq 5 ]] || \
+[[ $(grep -c '^    Process {' "$ROOT/Service.qml") -eq 6 ]] || \
   fail "Service.qml no longer has one process per helper command"
-[[ $(grep -c 'waitForEnd: true' "$ROOT/Service.qml") -eq 10 ]] || \
+[[ $(grep -c 'waitForEnd: true' "$ROOT/Service.qml") -eq 12 ]] || \
   fail "every helper stdout/stderr collector must wait for completion"
 [[ $(grep -c 'if (exitCode !== 0 || response === null)' "$ROOT/Service.qml") -eq 5 ]] || \
   fail "exit-code discipline is not enforced for every helper command"
@@ -181,6 +181,24 @@ jq -e '
   .barWidget.defaults.keybinds == "" and
   ([.barWidget.schema[] | select(.key == "keybinds" and .type == "string" and .defaultValue == "")] | length) == 1
 ' "$ROOT/manifest.json" >/dev/null || fail "the keybinds setting schema is missing"
+assert_contains 'recentsProcess.command = [helperPath(), "recents", operation]' \
+  "recents operations are not passed as a fixed argv array"
+assert_contains 'readonly property bool showRecents: boolSetting("showRecents", true)' \
+  "showRecents does not default to true"
+assert_contains 'for (var i = 0; i < recentMetadata.length && joined.length < 8; i++)' \
+  "recent items are not capped at eight"
+assert_contains 'source[j].shareId === recent.shareId && source[j].itemId === recent.itemId' \
+  "recent ids are not joined against the in-memory index"
+assert_contains 'runRecents("clear")' \
+  "disabling recents does not request helper-owned store deletion"
+assert_panel_contains 'text: "Recent"' \
+  "the Recent section is missing"
+assert_panel_contains 'text: "All"' \
+  "the empty-query All section is missing"
+assert_panel_contains 'model: svc.recentRows' \
+  "the Recent section is not rendered from joined index rows"
+assert_panel_contains 'model: svc.allRows' \
+  "the All section is missing its index rows"
 [[ $PANEL_SOURCE != *'--show-secrets'* ]] || fail "Panel.qml enables secret display"
 [[ $PANEL_SOURCE != *'property string password'* ]] || fail "Panel.qml can retain a password"
 

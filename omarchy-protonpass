@@ -487,6 +487,10 @@ parse_recents_args() {
       (( $# == 1 )) || return 2
       RECENTS_OPERATION=load
       ;;
+    clear)
+      (( $# == 1 )) || return 2
+      RECENTS_OPERATION=clear
+      ;;
     note)
       shift
       local share_id="" item_id="" seen_share=false seen_item=false
@@ -516,6 +520,16 @@ parse_recents_args() {
       ;;
     *) return 2 ;;
   esac
+}
+
+clear_recents_data() {
+  local path
+  path=$(recents_path) || return 1
+  if [[ ! -e $path && ! -L $path ]]; then
+    return 0
+  fi
+  [[ -f $path || -L $path ]] || return 1
+  rm -f -- "$path"
 }
 
 index_command() {
@@ -787,6 +801,13 @@ recents_command() {
         emit_simple recents ok "Recent item saved"
       else
         emit_simple recents error "Could not save recent item"
+      fi
+      ;;
+    clear)
+      if clear_recents_data; then
+        emit_simple recents ok "Recent items cleared"
+      else
+        emit_simple recents error "Could not clear recent items"
       fi
       ;;
   esac

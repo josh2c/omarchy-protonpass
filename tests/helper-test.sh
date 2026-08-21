@@ -165,6 +165,7 @@ assert_invalid_helper logout logout extra
 assert_invalid_helper clear-now clear-now extra
 assert_invalid_helper recents recents
 assert_invalid_helper recents recents load extra
+assert_invalid_helper recents recents clear extra
 assert_invalid_helper recents recents note
 assert_invalid_helper recents recents note --share-id share --item-id 'bad item'
 assert_invalid_helper recents recents note --share-id share --item-id item --share-id other
@@ -191,6 +192,8 @@ assert_jq '.schemaVersion == 1 and .command == "clear-now" and .state == "not-ow
 rm -f -- "$XDG_STATE_HOME/omarchy-protonpass/recents.json"
 recents_empty=$("$HELPER" recents load)
 assert_jq '.schemaVersion == 1 and .command == "recents" and .state == "ok" and .recents == [] and (.message|type) == "string"' "$recents_empty" "recents empty contract"
+recents_clear_empty=$("$HELPER" recents clear)
+assert_jq '.schemaVersion == 1 and .command == "recents" and .state == "ok" and (has("recents")|not)' "$recents_clear_empty" "recents clear absent store"
 
 # Source only the helper's core functions; its guarded main must not execute.
 # shellcheck disable=SC1090
@@ -355,6 +358,18 @@ assert_jq '(.recents|length) == 8 and .recents[0].shareId == "share_recent_4" an
   .recents[0].itemId == "item_recent_4" and
   ([.recents[] | select(.shareId == "share_recent_4" and .itemId == "item_recent_4")]|length) == 1' \
   "$promoted_recents" "recents promotion is unique"
+
+recents_cleared=$("$HELPER" recents clear)
+assert_jq '.state == "ok" and (has("recents")|not)' "$recents_cleared" "recents clear contract"
+[[ ! -e $RECENTS_FILE && ! -L $RECENTS_FILE ]] || fail "recents clear left the store behind"
+
+symlink_target="$TEST_SANDBOX/recents-symlink-target"
+printf '%s\n' 'keep' >"$symlink_target"
+ln -s "$symlink_target" "$RECENTS_FILE"
+symlink_cleared=$("$HELPER" recents clear)
+assert_jq '.state == "ok"' "$symlink_cleared" "recents clear removes a link, not its target"
+[[ ! -L $RECENTS_FILE ]] || fail "recents clear left a symlink store behind"
+assert_eq "keep" "$(<"$symlink_target")" "recents clear preserved symlink target"
 
 printf '{"recents":[{"shareId":"share","itemId":"item","ts":1,"title":"forbidden"}]}\n' >"$RECENTS_FILE"
 malformed_recents=$("$HELPER" recents load)
