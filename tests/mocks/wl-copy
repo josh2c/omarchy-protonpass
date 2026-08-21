@@ -12,3 +12,5 @@ if [[ -n ${MOCK_WL_COPY_LOG:-} ]]; then
     '$ARGS.positional as $args | {args:$args,sha256:$sha256}' -- "$@" \
     >>"$MOCK_WL_COPY_LOG"
 fi
+
+exit "${MOCK_WL_COPY_EXIT:-0}"

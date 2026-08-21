@@ -165,10 +165,10 @@ assert_invalid_helper copy copy --share-id '$(touch /tmp/helper-never-run)' --it
 
 index_ready=$(MOCK_SCENARIO=ready "$HELPER" index --exclude-vaults '')
 assert_jq '.schemaVersion == 1 and .command == "index" and .state == "ready" and (.message|type) == "string" and .items == [{itemId:"item_fixture_1",shareId:"share_fixture_1",vaultName:"Personal",title:"T0 Synthetic Login"}] and .warnings == []' "$index_ready" "index ready contract"
-copy_stub=$("$HELPER" copy --clear-seconds 0045 --field totp --item-id item_1 --share-id share/1= --paste-once)
-assert_jq '.schemaVersion == 1 and .command == "copy" and .state == "error" and .field == "totp" and .fallbackUsed == false and .clearSeconds == 45' "$copy_stub" "copy contract stub"
+copy_contract=$("$HELPER" copy --clear-seconds 0000 --field totp --item-id item_1 --share-id share/1= --paste-once)
+assert_jq '.schemaVersion == 1 and .command == "copy" and .state == "copied" and .field == "totp" and .fallbackUsed == false and .clearSeconds == 0' "$copy_contract" "copy contract"
 lock_stub=$("$HELPER" lock)
-assert_jq '.schemaVersion == 1 and .command == "lock" and .state == "error" and (.message|type) == "string"' "$lock_stub" "lock contract stub"
+assert_jq '.schemaVersion == 1 and .command == "lock" and .state == "locked" and (.message|type) == "string"' "$lock_stub" "lock contract"
 
 # Source only the helper's core functions; its guarded main must not execute.
 # shellcheck disable=SC1090
@@ -278,5 +278,182 @@ rm "$TEST_BIN/pass-cli"
 missing_cli_index=$("$HELPER" index --exclude-vaults '')
 assert_jq '.state == "cli-missing" and .items == [] and .warnings == [] and .message == "Proton Pass CLI not found"' "$missing_cli_index" "index missing pass-cli"
 ln -s "$TEST_ROOT/tests/mocks/pass-cli" "$TEST_BIN/pass-cli"
+
+hash_value() {
+  printf '%s' "$1" | sha256sum | cut -d' ' -f1
+}
+
+: >"$MOCK_CALLS_LOG"
+: >"$MOCK_WL_COPY_LOG"
+password_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 0)
+assert_jq '.schemaVersion == 1 and .command == "copy" and .state == "copied" and .field == "password" and .fallbackUsed == false and .clearSeconds == 0 and (keys|sort) == ["clearSeconds","command","fallbackUsed","field","message","schemaVersion","state"]' "$password_copy" "password copy contract"
+if [[ $password_copy == *synthetic-value* ]]; then fail "copy response contains secret value"; fi
+password_hash=$(hash_value synthetic-value)
+assert_jq ". == {args:[\"--sensitive\"],sha256:\"$password_hash\"}" "$(tail -n1 "$MOCK_WL_COPY_LOG")" "password copy bytes and sensitive argv"
+password_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
+assert_jq '. == [["item","view","--share-id","share_fixture_1","--item-id","item_fixture_1","--field","password"]]' "$password_calls" "password pass-cli argv"
+
+: >"$MOCK_WL_COPY_LOG"
+paste_once_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 0 --paste-once)
+assert_jq '.state == "copied"' "$paste_once_copy" "paste-once copy"
+assert_jq '.args == ["--sensitive","-o"]' "$(tail -n1 "$MOCK_WL_COPY_LOG")" "paste-once wl-copy argv"
+
+: >"$MOCK_WL_COPY_LOG"
+trailing_copy=$(MOCK_SCENARIO=value-with-trailing-newlines "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 0)
+assert_jq '.state == "copied"' "$trailing_copy" "trailing-newline copy"
+expected_secret_hash=$(printf 'synthetic-value\n\n' | sha256sum | cut -d' ' -f1)
+assert_jq ".sha256 == \"$expected_secret_hash\"" "$(tail -n1 "$MOCK_WL_COPY_LOG")" "sentinel strips exactly one trailing newline"
+
+: >"$MOCK_CALLS_LOG"
+username_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field username --clear-seconds 0)
+assert_jq '.state == "copied" and .fallbackUsed == false' "$username_copy" "username copy"
+assert_jq 'length == 1 and .[0][-1] == "username"' "$(jq -sc '.' "$MOCK_CALLS_LOG")" "username single fetch"
+
+: >"$MOCK_CALLS_LOG"
+email_fallback_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_email_1 \
+  --field username --clear-seconds 0)
+assert_jq '.state == "copied" and .field == "username" and .fallbackUsed == true' "$email_fallback_copy" "email fallback copy"
+assert_jq 'length == 2 and .[0][-1] == "username" and .[1][-1] == "email"' "$(jq -sc '.' "$MOCK_CALLS_LOG")" "email fallback argv"
+
+: >"$MOCK_CALLS_LOG"
+empty_username_fallback=$(MOCK_SCENARIO=ready MOCK_EMPTY_FIELD=username "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_empty_username \
+  --field username --clear-seconds 0)
+assert_jq '.state == "copied" and .fallbackUsed == true' "$empty_username_fallback" "zero-length username fallback"
+assert_jq 'length == 2 and .[1][-1] == "email"' "$(jq -sc '.' "$MOCK_CALLS_LOG")" "zero-length fallback fetches email"
+
+: >"$MOCK_WL_COPY_LOG"
+missing_username_copy=$(MOCK_SCENARIO=no-username "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_email_1 \
+  --field username --clear-seconds 0)
+assert_jq '.state == "no-field" and .message == "No username or email on this item" and .fallbackUsed == false' "$missing_username_copy" "missing username and email"
+[[ ! -s $MOCK_WL_COPY_LOG ]] || fail "missing username copied to clipboard"
+
+missing_totp_copy=$(MOCK_SCENARIO=no-totp "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field totp --clear-seconds 0)
+assert_jq '.state == "no-field" and .message == "No TOTP on this item"' "$missing_totp_copy" "missing TOTP"
+
+: >"$MOCK_WL_COPY_LOG"
+empty_password_copy=$(MOCK_SCENARIO=ready MOCK_EMPTY_FIELD=password "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 0)
+assert_jq '.state == "no-field" and .message == "No password on this item"' "$empty_password_copy" "zero-length password"
+[[ ! -s $MOCK_WL_COPY_LOG ]] || fail "zero-length password copied to clipboard"
+
+for variant_hash in \
+  'canonical-multiple:123456' \
+  'canonical-reversed:123456' \
+  'custom:234567' \
+  'uri-only:345678'; do
+  variant=${variant_hash%%:*}
+  expected_code=${variant_hash#*:}
+  : >"$MOCK_CALLS_LOG"
+  : >"$MOCK_WL_COPY_LOG"
+  totp_copy=$(MOCK_SCENARIO=ready MOCK_TOTP_VARIANT=$variant "$HELPER" copy \
+    --share-id share_fixture_1 --item-id item_fixture_1 \
+    --field totp --clear-seconds 0)
+  assert_jq '.state == "copied" and .field == "totp"' "$totp_copy" "TOTP extraction for $variant"
+  expected_code_hash=$(hash_value "$expected_code")
+  assert_jq ".sha256 == \"$expected_code_hash\"" "$(tail -n1 "$MOCK_WL_COPY_LOG")" "TOTP bytes for $variant"
+  assert_jq 'length == 1 and .[0][0:2] == ["item","totp"] and (.[0]|index("--field")|not)' "$(jq -sc '.' "$MOCK_CALLS_LOG")" "field-less TOTP argv for $variant"
+done
+
+: >"$MOCK_WL_COPY_LOG"
+empty_totp_copy=$(MOCK_SCENARIO=ready MOCK_TOTP_VARIANT=empty "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field totp --clear-seconds 0)
+assert_jq '.state == "error" and (.message|contains("Copy failed"))' "$empty_totp_copy" "empty TOTP map"
+[[ ! -s $MOCK_WL_COPY_LOG ]] || fail "malformed TOTP copied to clipboard"
+
+for scenario_state in 'logged-out:logged-out' 'expired:logged-out' 'locked:locked' 'offline:unreachable' 'timeout-sleeps:unreachable'; do
+  scenario=${scenario_state%%:*}
+  expected_state=${scenario_state#*:}
+  if [[ $scenario == timeout-sleeps ]]; then
+    failed_copy=$(MOCK_SCENARIO=$scenario MOCK_TIMEOUT_EXIT=1 "$HELPER" copy \
+      --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0)
+  else
+    failed_copy=$(MOCK_SCENARIO=$scenario "$HELPER" copy \
+      --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0)
+  fi
+  assert_jq ".state == \"$expected_state\" and .field == \"password\" and .fallbackUsed == false and .clearSeconds == 0" "$failed_copy" "copy state for $scenario"
+done
+
+: >"$MOCK_WL_COPY_LOG"
+wl_copy_failure=$(MOCK_SCENARIO=ready MOCK_WL_COPY_EXIT=1 "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 0)
+assert_jq '.state == "error" and .message == "Copy failed — check connection and try again"' "$wl_copy_failure" "wl-copy failure"
+
+: >"$MOCK_WL_COPY_LOG"
+: >"$MOCK_WL_PASTE_LOG"
+prompt_start=$EPOCHREALTIME
+prompt_copy=$(MOCK_SCENARIO=ready \
+  MOCK_WL_COPY_SLEEP_SECONDS=0.05 \
+  MOCK_WL_PASTE_VALUE=synthetic-value \
+  "$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 1)
+prompt_end=$EPOCHREALTIME
+prompt_elapsed=$(jq -n --arg start "$prompt_start" --arg end "$prompt_end" \
+  '($end|tonumber) - ($start|tonumber)')
+assert_jq '.state == "copied" and .clearSeconds == 1' "$prompt_copy" "timed-clear copy response"
+assert_jq '. < 0.75' "$prompt_elapsed" "copy response returns before clearer sleeps"
+sleep 1.2
+matched_clear_calls=$(jq -sc '.' "$MOCK_WL_COPY_LOG")
+assert_jq 'length == 2 and .[0].args == ["--sensitive"] and .[1].args == ["--clear"]' "$matched_clear_calls" "matching clipboard is cleared"
+assert_jq 'length == 1 and .[0] == ["--no-newline"]' "$(jq -sc '.' "$MOCK_WL_PASTE_LOG")" "clearer reads clipboard without newline"
+
+: >"$MOCK_WL_COPY_LOG"
+: >"$MOCK_WL_PASTE_LOG"
+newer_copy=$(MOCK_SCENARIO=ready MOCK_WL_PASTE_VALUE='newer clipboard value' \
+  "$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 1)
+assert_jq '.state == "copied"' "$newer_copy" "newer-content copy setup"
+sleep 1.1
+assert_jq 'length == 1 and .[0].args == ["--sensitive"]' "$(jq -sc '.' "$MOCK_WL_COPY_LOG")" "newer clipboard content survives expiry"
+
+: >"$MOCK_WL_COPY_LOG"
+: >"$MOCK_WL_PASTE_LOG"
+zero_clear_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
+  --share-id share_fixture_1 --item-id item_fixture_1 \
+  --field password --clear-seconds 0)
+assert_jq '.state == "copied" and .clearSeconds == 0' "$zero_clear_copy" "zero clear seconds"
+sleep 0.1
+[[ ! -s $MOCK_WL_PASTE_LOG ]] || fail "clearer spawned when clear seconds is zero"
+
+: >"$MOCK_CALLS_LOG"
+locked_response=$(MOCK_SCENARIO=ready "$HELPER" lock)
+assert_jq '.schemaVersion == 1 and .command == "lock" and .state == "locked" and .message == "Session locked"' "$locked_response" "lock success"
+assert_jq '. == [["session","lock"]]' "$(jq -sc '.' "$MOCK_CALLS_LOG")" "lock pass-cli argv"
+no_lock_response=$(MOCK_SCENARIO=no-lock "$HELPER" lock)
+assert_jq '.state == "no-lock" and (.message|contains("create-lock")) and (tostring|contains("Session has no lock")|not)' "$no_lock_response" "lock without configured lock"
+offline_lock=$(MOCK_SCENARIO=offline "$HELPER" lock)
+assert_jq ".state == \"unreachable\" and .message == \"Can't reach Proton\"" "$offline_lock" "offline lock"
+
+rm "$TEST_BIN/pass-cli"
+missing_copy_cli=$("$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0)
+assert_jq '.state == "cli-missing"' "$missing_copy_cli" "copy missing pass-cli"
+missing_lock_cli=$("$HELPER" lock)
+assert_jq '.state == "cli-missing"' "$missing_lock_cli" "lock missing pass-cli"
+ln -s "$TEST_ROOT/tests/mocks/pass-cli" "$TEST_BIN/pass-cli"
+
+rm "$TEST_BIN/wl-copy"
+missing_wl_copy=$("$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0)
+assert_jq '.state == "error" and (.message|contains("Copy failed"))' "$missing_wl_copy" "copy missing wl-copy"
+ln -s "$TEST_ROOT/tests/mocks/wl-copy" "$TEST_BIN/wl-copy"
+
+rm "$TEST_BIN/wl-paste"
+missing_wl_paste=$("$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 1)
+assert_jq '.state == "error" and (.message|contains("Copy failed"))' "$missing_wl_paste" "timed copy missing wl-paste"
+ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
 
 printf 'helper and mock harness tests passed\n'

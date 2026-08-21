@@ -139,6 +139,10 @@ fi
 if [[ ${1:-} == item && ${2:-} == view ]]; then
   field=$(arg_value --field "$@") || field=""
   item_id=$(arg_value --item-id "$@") || item_id=""
+  if [[ -n ${MOCK_EMPTY_FIELD:-} && $field == "$MOCK_EMPTY_FIELD" ]]; then
+    printf '\n'
+    exit 0
+  fi
   if [[ $scenario == no-username && ( $field == username || $field == email ) ]]; then
     fixture_exit "no-$field"
   fi
@@ -153,7 +157,7 @@ if [[ ${1:-} == item && ${2:-} == view ]]; then
       cat "$FIXTURES/field-output-newline.txt"
       ;;
     email)
-      [[ $item_id == item_email_1 ]] || fixture_exit no-email
+      [[ $item_id == item_email_1 || $item_id == item_empty_username ]] || fixture_exit no-email
       cat "$FIXTURES/field-output-newline.txt"
       ;;
     password) cat "$FIXTURES/field-output-newline.txt" ;;
@@ -167,7 +171,15 @@ fi
 
 if [[ ${1:-} == item && ${2:-} == totp ]]; then
   if [[ $scenario == no-totp ]]; then fixture_exit no-totp; fi
-  cat "$FIXTURES/item-totp.json"
+  case ${MOCK_TOTP_VARIANT:-canonical} in
+    canonical) cat "$FIXTURES/item-totp.json" ;;
+    canonical-multiple) cat "$FIXTURES/item-totp-multiple.json" ;;
+    canonical-reversed) jq -cn '{totp_uri:"654321",totp:"123456"}' ;;
+    custom) jq -cn '{custom_code:"234567",custom_code_uri:"765432"}' ;;
+    uri-only) jq -cn '{only_uri:"345678"}' ;;
+    empty) jq -cn '{}' ;;
+    *) printf '{not valid json\n' ;;
+  esac
   exit 0
 fi
 

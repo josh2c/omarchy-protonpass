@@ -3,6 +3,8 @@ set -euo pipefail
 
 readonly DOCTOR_TIMEOUT_SECONDS=5
 readonly INDEX_TIMEOUT_SECONDS=20
+readonly COPY_TIMEOUT_SECONDS=15
+readonly LOCK_TIMEOUT_SECONDS=15
 
 emit_dispatch_error() {
   jq -cn '{
@@ -58,25 +60,43 @@ emit_index() {
     }'
 }
 
-emit_copy_stub() {
-  local field=$1 clear_seconds=$2
-  jq -cn --arg field "$field" --argjson clearSeconds "$clear_seconds" '{
-    schemaVersion: 1,
-    command: "copy",
-    state: "error",
-    message: "Copy is not implemented yet",
-    field: $field,
-    fallbackUsed: false,
-    clearSeconds: $clearSeconds
-  }'
+emit_copy() {
+  local state=$1 message=$2 field=$3 fallback_used=$4 clear_seconds=$5
+  jq -cn \
+    --arg state "$state" \
+    --arg message "$message" \
+    --arg field "$field" \
+    --argjson fallbackUsed "$fallback_used" \
+    --argjson clearSeconds "$clear_seconds" \
+    '{
+      schemaVersion: 1,
+      command: "copy",
+      state: $state,
+      message: $message,
+      field: $field,
+      fallbackUsed: $fallbackUsed,
+      clearSeconds: $clearSeconds
+    }'
 }
 
-emit_lock_stub() {
-  jq -cn '{
+emit_copy_classified_failure() {
+  local no_field_message=$1 message=$CLASSIFIED_MESSAGE
+  if [[ $CLASSIFIED_STATE == no-field ]]; then
+    message=$no_field_message
+  elif [[ $CLASSIFIED_STATE == error ]]; then
+    message="Copy failed — check connection and try again"
+  fi
+  emit_copy "$CLASSIFIED_STATE" "$message" \
+    "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+}
+
+emit_lock() {
+  local state=$1 message=$2
+  jq -cn --arg state "$state" --arg message "$message" '{
     schemaVersion: 1,
     command: "lock",
-    state: "error",
-    message: "Lock is not implemented yet"
+    state: $state,
+    message: $message
   }'
 }
 
@@ -112,6 +132,41 @@ run_pass_cli_captured() {
   captured_stderr=$(cat <&"$stderr_read")
   exec {stderr_read}>&-
   wait "$stderr_pid"
+}
+
+# The value nameref is the caller's single unexported secret variable.
+# shellcheck disable=SC2034
+run_pass_cli_secret_captured() {
+  local value_name=$1 stderr_name=$2 status_name=$3 timeout_seconds=$4
+  shift 4
+  local stderr_read stderr_write stderr_pid capture_write
+  local -n captured_value=$value_name captured_stderr=$stderr_name captured_status=$status_name
+
+  coproc SECRET_STDERR_PIPE { cat; }
+  stderr_read=${SECRET_STDERR_PIPE[0]}
+  stderr_write=${SECRET_STDERR_PIPE[1]}
+  stderr_pid=$SECRET_STDERR_PIPE_PID
+  exec {capture_write}>&"$stderr_write"
+  exec {stderr_write}>&-
+
+  if captured_value=$(
+    run_pass_cli "$timeout_seconds" "$@" 2>&"$capture_write"
+    command_status=$?
+    printf x
+    exit "$command_status"
+  ); then
+    captured_status=0
+  else
+    captured_status=$?
+  fi
+
+  exec {capture_write}>&-
+  captured_stderr=$(cat <&"$stderr_read")
+  exec {stderr_read}>&-
+  wait "$stderr_pid"
+
+  captured_value=${captured_value%x}
+  captured_value=${captured_value%$'\n'}
 }
 
 # Outputs are globals so callers can classify without reparsing or serializing stderr.
@@ -373,12 +428,145 @@ index_command() {
 }
 
 copy_command() {
-  : "$COPY_SHARE_ID" "$COPY_ITEM_ID" "$COPY_PASTE_ONCE"
-  emit_copy_stub "$COPY_FIELD" "$COPY_CLEAR_SECONDS"
+  local +x val="" stderr_blob="" status=0 fallback_used=false hash secs cur
+  local -a copy_args=(--sensitive)
+
+  if ! command -v pass-cli >/dev/null 2>&1; then
+    classify_failure copy 127 ""
+    emit_copy "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" \
+      "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+    return 0
+  fi
+  if ! command -v wl-copy >/dev/null 2>&1 ||
+     { (( COPY_CLEAR_SECONDS > 0 )) && ! command -v wl-paste >/dev/null 2>&1; }; then
+    emit_copy error "Copy failed — check connection and try again" \
+      "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+    return 0
+  fi
+
+  case $COPY_FIELD in
+    username)
+      run_pass_cli_secret_captured val stderr_blob status \
+        "$COPY_TIMEOUT_SECONDS" item view \
+        --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field username
+      if (( status != 0 )); then
+        classify_failure copy "$status" "$stderr_blob"
+        if [[ $CLASSIFIED_STATE != no-field ]]; then
+          emit_copy_classified_failure "No username or email on this item"
+          unset val
+          return 0
+        fi
+      fi
+      if (( status != 0 )) || [[ -z $val ]]; then
+        run_pass_cli_secret_captured val stderr_blob status \
+          "$COPY_TIMEOUT_SECONDS" item view \
+          --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field email
+        if (( status != 0 )); then
+          classify_failure copy "$status" "$stderr_blob"
+          emit_copy_classified_failure "No username or email on this item"
+          unset val
+          return 0
+        fi
+        if [[ -z $val ]]; then
+          emit_copy no-field "No username or email on this item" \
+            "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+          unset val
+          return 0
+        fi
+        fallback_used=true
+      fi
+      ;;
+    password)
+      run_pass_cli_secret_captured val stderr_blob status \
+        "$COPY_TIMEOUT_SECONDS" item view \
+        --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field password
+      if (( status != 0 )); then
+        classify_failure copy "$status" "$stderr_blob"
+        emit_copy_classified_failure "No password on this item"
+        unset val
+        return 0
+      fi
+      if [[ -z $val ]]; then
+        emit_copy no-field "No password on this item" \
+          "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+        unset val
+        return 0
+      fi
+      ;;
+    totp)
+      run_pass_cli_secret_captured val stderr_blob status \
+        "$COPY_TIMEOUT_SECONDS" item totp \
+        --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --output json
+      if (( status != 0 )); then
+        classify_failure copy "$status" "$stderr_blob"
+        emit_copy_classified_failure "No TOTP on this item"
+        unset val
+        return 0
+      fi
+      if ! printf '%s' "$val" | jq -e '
+          type == "object" and length > 0 and
+          all(.[]; type == "string" and length > 0)
+        ' >/dev/null 2>&1; then
+        emit_copy error "Copy failed — check connection and try again" \
+          "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+        unset val
+        return 0
+      fi
+      val=$(printf '%s' "$val" | jq -r '
+        if has("totp") then .totp
+        else
+          (to_entries | map(select(.key | endswith("_uri") | not))) as $codes
+          | if ($codes | length) > 0 then $codes[0].value
+            else (to_entries[0].value)
+            end
+        end
+      '; printf x)
+      val=${val%x}
+      val=${val%$'\n'}
+      ;;
+  esac
+
+  if [[ $COPY_PASTE_ONCE == true ]]; then copy_args+=(-o); fi
+  if ! printf '%s' "$val" | wl-copy "${copy_args[@]}" >/dev/null 2>&1; then
+    unset val
+    emit_copy error "Copy failed — check connection and try again" \
+      "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+    return 0
+  fi
+  hash=$(printf '%s' "$val" | sha256sum | cut -d' ' -f1)
+  unset val
+
+  if (( COPY_CLEAR_SECONDS > 0 )); then
+    secs=$COPY_CLEAR_SECONDS
+    ( exec >/dev/null 2>&1 </dev/null
+      sleep "$secs"
+      cur=$(wl-paste --no-newline 2>/dev/null | sha256sum | cut -d' ' -f1)
+      [ "$cur" = "$hash" ] && wl-copy --clear ) &
+    disown
+  fi
+
+  emit_copy copied "Copied to clipboard" \
+    "$COPY_FIELD" "$fallback_used" "$COPY_CLEAR_SECONDS"
 }
 
 lock_command() {
-  emit_lock_stub
+  local stdout="" stderr_blob="" status=0
+
+  if ! command -v pass-cli >/dev/null 2>&1; then
+    classify_failure lock 127 ""
+    emit_lock "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
+    return 0
+  fi
+
+  run_pass_cli_captured stdout stderr_blob status \
+    "$LOCK_TIMEOUT_SECONDS" session lock
+  : "$stdout"
+  if (( status == 0 )); then
+    emit_lock locked "Session locked"
+  else
+    classify_failure lock "$status" "$stderr_blob"
+    emit_lock "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
+  fi
 }
 
 main() {
