@@ -1,6 +1,6 @@
 # omarchy-protonpass — v1 Implementation Plan
 
-Status: **ready to implement** (rev 2.4, **T0 complete** — all fixtures captured) · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
+Status: **ready to implement** (rev 2.5, **contracts frozen** at T3 acceptance) · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
 
 All product, architecture, security, and scope decisions are resolved. Facts verified against a live Omarchy 4.x install (`/usr/share/omarchy/shell`, `/usr/bin/omarchy-plugin-validate`), a clone of `robzolkos/omarchy-github`, and the `protonpass/pass-cli` Rust source (v2.3.2, 2026-08). The §2.2 manifest passes `omarchy-plugin-validate` verbatim (tested). `salemsayed/omwarden` does not exist and is not a reference.
 
@@ -14,6 +14,8 @@ resolved the keyboard-focus model; specified the copy-in-flight lifecycle; the c
 **Rev 2.3 (T0 completion):** the live revoked-session response is a multi-line anyhow chain ending in `non-existent session` (source: `pass/src/muon_ext.rs:31` — pass-cli's own detection string), which the rev 2.2 patterns missed; the classifier now maps `non-existent session` → `logged-out` with the expired-session message, and §2.7 makes explicit that patterns match anywhere in the **full multi-line stderr capture** (anyhow "Caused by:" chains included). Field-less `item totp` success output can carry both `totp` and `totp_uri` keys (both values are generated codes in this command — `TotpOutput::Code` is forced; but the extraction fallback defensively skips `*_uri`-named keys anyway). Confirmed: the weekly self-update check cannot stall helper calls in v2.3.2 (skipped when stderr is captured/non-terminal). T0 is closed: all fixtures captured, identity-free, at `tests/fixtures/`; the disposable CLI session was revoked afterward.
 
 **Rev 2.4 (T3 contract-gap fix):** the §2.5 `command` enum gains `unknown`, permitted only for dispatcher-level argv errors (empty invocation, unrecognized subcommand) where no truthful command name exists; invalid options for a recognized subcommand keep that command's name. Both are exit 2 + JSON; the Service's handling (exit 2 → ERROR) is unchanged. The T1 stub's practice of labeling such errors `doctor` was misleading and is superseded.
+
+**Rev 2.5 (T3-acceptance codification):** `index`'s success state `ready` is now formally enumerated in §2.5 (`ready |` shared error states) — previously implied only by the response example and the §2.6 diagram. Ratifies the interim answer given while T4 was paused. Contracts are frozen as of T3 acceptance; further changes require a schemaVersion discussion, not a rev note.
 
 **Corrections to the original brief** (verified, unchanged from rev 1): manifest requires `entryPoints`; `activation` is dead; single-instance is `barWidget.allowMultiple: false`. pass-cli sessions live in a file under `~/.local/share/proton-pass-cli/.session/` encrypted with a kernel-keyring key (defaults we never override). Session lock is enforced **server-side** — listing and retrieval always need network. Item summaries carry no username preview and no TOTP flag, and are non-secret by source-level contract. `item list` is per-vault. pass-cli has no clipboard command. Field retrieval addresses items by `--share-id`/`--item-id`/`--field` (bare value + `\n` on stdout); titles never enter a command line.
 
@@ -156,7 +158,7 @@ Common envelope on every response:
 
 `doctor` adds `"passCli": {"present": true, "version": "2.3.2"}, "wlClipboard": {"present": true}`; states `ok | missing-deps`.
 
-`index` adds `"items": [ { "itemId": "xyz==", "shareId": "abc==", "vaultName": "Personal", "title": "GitHub" } ]` and `"warnings": []` (index-only; per-vault partial-failure notes). No `vaults` array — nothing consumes it.
+`index` adds `"items": [ { "itemId": "xyz==", "shareId": "abc==", "vaultName": "Personal", "title": "GitHub" } ]` and `"warnings": []` (index-only; per-vault partial-failure notes); states `ready |` shared. No `vaults` array — nothing consumes it.
 
 Shared error states for `index`/`copy`/`lock`: `cli-missing | logged-out | locked | unreachable | error`. (There is deliberately no plan-eligibility state: the eligibility error surfaces only inside the login terminal, and pass-cli force-logs-out on it, so the helper can only ever observe `logged-out` — eligibility guidance lives in the setup/LOGGED_OUT views and README instead.) `logged-out` covers session-expired (the `message` distinguishes "Not signed in" from "Session expired — sign in again"); `unreachable` covers network failure and timeout (`message` distinguishes). The classifier stays fully granular internally — only the state fan-out is merged.
 

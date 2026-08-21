@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly DOCTOR_TIMEOUT_SECONDS=5
+readonly INDEX_TIMEOUT_SECONDS=20
 
 emit_dispatch_error() {
   jq -cn '{
@@ -40,15 +41,21 @@ emit_doctor() {
     }'
 }
 
-emit_index_stub() {
-  jq -cn '{
-    schemaVersion: 1,
-    command: "index",
-    state: "error",
-    message: "Index is not implemented yet",
-    items: [],
-    warnings: []
-  }'
+emit_index() {
+  local state=$1 message=$2 items=$3 warnings=$4
+  jq -cn \
+    --arg state "$state" \
+    --arg message "$message" \
+    --argjson items "$items" \
+    --argjson warnings "$warnings" \
+    '{
+      schemaVersion: 1,
+      command: "index",
+      state: $state,
+      message: $message,
+      items: $items,
+      warnings: $warnings
+    }'
 }
 
 emit_copy_stub() {
@@ -78,6 +85,33 @@ run_pass_cli() {
   shift
   PASS_LOG_LEVEL=off MUON_LOG_LEVEL=off \
     timeout --foreground "${timeout_seconds}s" pass-cli "$@"
+}
+
+# The three namerefs are output parameters consumed by callers.
+# shellcheck disable=SC2034
+run_pass_cli_captured() {
+  local stdout_name=$1 stderr_name=$2 status_name=$3 timeout_seconds=$4
+  shift 4
+  local stderr_read stderr_write stderr_pid capture_write
+  local -n captured_stdout=$stdout_name captured_stderr=$stderr_name captured_status=$status_name
+
+  coproc STDERR_PIPE { cat; }
+  stderr_read=${STDERR_PIPE[0]}
+  stderr_write=${STDERR_PIPE[1]}
+  stderr_pid=$STDERR_PIPE_PID
+  exec {capture_write}>&"$stderr_write"
+  exec {stderr_write}>&-
+
+  if captured_stdout=$(run_pass_cli "$timeout_seconds" "$@" 2>&"$capture_write"); then
+    captured_status=0
+  else
+    captured_status=$?
+  fi
+
+  exec {capture_write}>&-
+  captured_stderr=$(cat <&"$stderr_read")
+  exec {stderr_read}>&-
+  wait "$stderr_pid"
 }
 
 # Outputs are globals so callers can classify without reparsing or serializing stderr.
@@ -258,8 +292,84 @@ parse_copy_args() {
 }
 
 index_command() {
-  : "$INDEX_EXCLUDE_VAULTS"
-  emit_index_stub
+  local vault_stdout="" vault_stderr="" vaults="[]" items="[]" warnings="[]"
+  local vault_status=0 vault_json share_id item_stdout item_stderr item_status mapped
+
+  if ! command -v pass-cli >/dev/null 2>&1; then
+    classify_failure index 127 ""
+    emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]'
+    return 0
+  fi
+
+  run_pass_cli_captured vault_stdout vault_stderr vault_status \
+    "$INDEX_TIMEOUT_SECONDS" vault list --output json
+  if (( vault_status != 0 )); then
+    classify_failure index "$vault_status" "$vault_stderr"
+    emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]'
+    return 0
+  fi
+
+  if ! jq -e '
+      type == "object" and
+      (.vaults | type) == "array" and
+      all(.vaults[];
+        (.name | type) == "string" and
+        (.share_id | type) == "string" and
+        (.share_id | test("^[A-Za-z0-9+/=_-]{1,256}$"))
+      )
+    ' <<<"$vault_stdout" >/dev/null 2>&1; then
+    emit_index error "Something went wrong talking to pass-cli" '[]' '[]'
+    return 0
+  fi
+
+  vaults=$(jq -c --arg excluded "$INDEX_EXCLUDE_VAULTS" '
+    def trim: sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "");
+    ($excluded | split(",") | map(trim) | map(select(length > 0))) as $excludedNames
+    | [.vaults[] | select(.name as $name | ($excludedNames | index($name) | not))]
+  ' <<<"$vault_stdout")
+
+  while IFS= read -r vault_json; do
+    share_id=$(jq -r '.share_id' <<<"$vault_json")
+    run_pass_cli_captured item_stdout item_stderr item_status \
+      "$INDEX_TIMEOUT_SECONDS" item list \
+      --share-id "$share_id" \
+      --filter-type login \
+      --filter-state active \
+      --output json
+    : "$item_stderr"
+
+    if (( item_status != 0 )) || ! jq -e --arg shareId "$share_id" '
+        type == "object" and
+        (.items | type) == "array" and
+        all(.items[];
+          (.id | type) == "string" and
+          (.id | test("^[A-Za-z0-9+/=_-]{1,256}$")) and
+          (.share_id | type) == "string" and
+          .share_id == $shareId and
+          (.title | type) == "string"
+        )
+      ' <<<"$item_stdout" >/dev/null 2>&1; then
+      warnings=$(jq -cn --argjson warnings "$warnings" \
+        '$warnings + ["A vault could not be loaded"]')
+      continue
+    fi
+
+    mapped=$(jq -c --argjson vault "$vault_json" '[
+      .items[] | {
+        itemId: .id,
+        shareId: .share_id,
+        vaultName: $vault.name,
+        title: .title
+      }
+    ]' <<<"$item_stdout")
+    items=$(jq -cn --argjson items "$items" --argjson mapped "$mapped" '$items + $mapped')
+  done < <(jq -c '.[]' <<<"$vaults")
+
+  if [[ $warnings == '[]' ]]; then
+    emit_index ready "Login items ready" "$items" "$warnings"
+  else
+    emit_index ready "Some vaults could not be loaded" "$items" "$warnings"
+  fi
 }
 
 copy_command() {

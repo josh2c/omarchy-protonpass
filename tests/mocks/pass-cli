@@ -53,7 +53,7 @@ emit_multivault_items() {
     share_fixture_1) emit_ready_items ;;
     share_fixture_2)
       jq -cn '{items:[
-        {id:"item_work_1",share_id:"share_fixture_2",vault_id:"vault_fixture_2",state:"Active",flags:[],create_time:"2026-08-20T22:45:00",modify_time:"2026-08-20T22:45:00",title:"Work Login",item_type:"login"}
+        {id:"item_work_1",share_id:"share_fixture_2",vault_id:"vault_fixture_2",state:"Active",flags:[],create_time:"2026-08-20T22:45:00",modify_time:"2026-08-20T22:45:00",title:"T0 Synthetic Login",item_type:"login"}
       ]}'
       ;;
     *) jq -cn '{items:[]}' ;;
@@ -93,6 +93,7 @@ case "$scenario" in
   expired) fixture_exit invalidated ;;
   offline) fixture_exit network-down ;;
   timeout-sleeps)
+    if [[ ${MOCK_TIMEOUT_EXIT:-0} == 1 ]]; then exit 124; fi
     sleep "${MOCK_SLEEP_SECONDS:-30}"
     ;;
 esac
@@ -116,6 +117,10 @@ if [[ ${1:-} == item && ${2:-} == list ]]; then
   if [[ -n ${MOCK_FAIL_SHARE_ID:-} && $share_id == "$MOCK_FAIL_SHARE_ID" ]]; then
     printf 'Error: Synthetic per-vault failure\n' >&2
     exit 1
+  fi
+  if [[ -n ${MOCK_MALFORMED_SHARE_ID:-} && $share_id == "$MOCK_MALFORMED_SHARE_ID" ]]; then
+    printf '{not valid json\n'
+    exit 0
   fi
   case "$scenario" in
     ready-multivault) emit_multivault_items "$share_id" ;;

@@ -163,8 +163,8 @@ assert_invalid_helper copy copy --share-id "$long_id" --item-id item --field pas
 assert_invalid_helper copy copy --share-id '$(touch /tmp/helper-never-run)' --item-id item --field password --clear-seconds 45
 [[ ! -e /tmp/helper-never-run ]] || fail "invalid helper argument was executed"
 
-index_stub=$("$HELPER" index --exclude-vaults '')
-assert_jq '.schemaVersion == 1 and .command == "index" and .state == "error" and .items == [] and .warnings == []' "$index_stub" "index contract stub"
+index_ready=$(MOCK_SCENARIO=ready "$HELPER" index --exclude-vaults '')
+assert_jq '.schemaVersion == 1 and .command == "index" and .state == "ready" and (.message|type) == "string" and .items == [{itemId:"item_fixture_1",shareId:"share_fixture_1",vaultName:"Personal",title:"T0 Synthetic Login"}] and .warnings == []' "$index_ready" "index ready contract"
 copy_stub=$("$HELPER" copy --clear-seconds 0045 --field totp --item-id item_1 --share-id share/1= --paste-once)
 assert_jq '.schemaVersion == 1 and .command == "copy" and .state == "error" and .field == "totp" and .fallbackUsed == false and .clearSeconds == 45' "$copy_stub" "copy contract stub"
 lock_stub=$("$HELPER" lock)
@@ -217,5 +217,66 @@ MOCK_SCENARIO=timeout-sleeps MOCK_SLEEP_SECONDS=1 run_pass_cli 0.02 vault list -
 runner_timeout_status=$?
 set -e
 assert_eq "124" "$runner_timeout_status" "pass-cli timeout wrapper"
+
+: >"$MOCK_CALLS_LOG"
+multivault_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and (.items|length) == 2 and ([.items[].vaultName]|sort) == ["Personal","Work"] and ([.items[].title]|unique) == ["T0 Synthetic Login"] and .warnings == []' "$multivault_index" "index multi-vault merge with duplicate titles"
+multivault_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
+assert_jq 'length == 3 and .[0] == ["vault","list","--output","json"] and (.[1:]|all(.[0] == "item" and .[1] == "list" and .[4:] == ["--filter-type","login","--filter-state","active","--output","json"]))' "$multivault_calls" "index pass-cli argv"
+
+: >"$MOCK_CALLS_LOG"
+excluded_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults '  Work , Missing  ')
+assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == []' "$excluded_index" "trim-aware vault exclusion"
+excluded_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
+assert_jq 'length == 2 and all(.[]; (join(" ")|contains("Work")|not) and (join(" ")|contains("Personal")|not)) and .[1][3] == "share_fixture_1"' "$excluded_calls" "vault names absent from argv"
+
+case_sensitive_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults 'work')
+assert_jq '(.items|length) == 2' "$case_sensitive_index" "vault exclusion is case-sensitive"
+all_excluded_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults ' Personal, Work ')
+assert_jq '.state == "ready" and .items == [] and .warnings == []' "$all_excluded_index" "all vaults excluded"
+
+empty_vault_index=$(MOCK_SCENARIO=empty-vault "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and (.items|length) == 1 and .warnings == []' "$empty_vault_index" "empty vault index"
+zero_vault_index=$(MOCK_SCENARIO=zero-vaults "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and .items == [] and .warnings == []' "$zero_vault_index" "zero vault index"
+
+: >"$MOCK_CALLS_LOG"
+unicode_index=$(MOCK_SCENARIO=unicode-titles "$HELPER" index --exclude-vaults '')
+# shellcheck disable=SC2016
+assert_jq '(.items|length) == 5 and any(.items[]; .title == "Quote \"login\"") and any(.items[]; .title == "Line\nbreak") and any(.items[]; .title == "Emoji 🔐") and any(.items[]; .title == "RTL مثال") and any(.items[]; .title|contains("$(touch /tmp/never-run)"))' "$unicode_index" "index preserves unicode and metacharacter titles"
+[[ ! -e /tmp/never-run ]] || fail "index executed title metacharacters"
+unicode_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
+# shellcheck disable=SC2016
+assert_jq 'all(.[]; (join(" ")|contains("Quote \"login\"")|not) and (join(" ")|contains("Emoji 🔐")|not) and (join(" ")|contains("$(touch /tmp/never-run)")|not))' "$unicode_calls" "item titles absent from argv"
+
+: >"$MOCK_CALLS_LOG"
+partial_index=$(MOCK_SCENARIO=ready-multivault MOCK_FAIL_SHARE_ID=share_fixture_2 "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == ["A vault could not be loaded"] and (.message|contains("Some vaults"))' "$partial_index" "index partial failure"
+partial_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
+assert_jq 'length == 3 and any(.[]; index("share_fixture_2"))' "$partial_calls" "index continues through per-vault failure"
+
+malformed_vault_index=$(MOCK_SCENARIO=malformed-json "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "error" and .items == [] and .warnings == [] and (.message|contains("pass-cli"))' "$malformed_vault_index" "malformed vault JSON"
+malformed_item_index=$(MOCK_SCENARIO=ready-multivault MOCK_MALFORMED_SHARE_ID=share_fixture_2 "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and (.warnings|length) == 1' "$malformed_item_index" "malformed per-vault JSON"
+
+for scenario_state in 'logged-out:logged-out' 'expired:logged-out' 'locked:locked' 'offline:unreachable' 'timeout-sleeps:unreachable'; do
+  scenario=${scenario_state%%:*}
+  expected_state=${scenario_state#*:}
+  if [[ $scenario == timeout-sleeps ]]; then
+    classified_index=$(MOCK_SCENARIO=$scenario MOCK_TIMEOUT_EXIT=1 "$HELPER" index --exclude-vaults '')
+  else
+    classified_index=$(MOCK_SCENARIO=$scenario "$HELPER" index --exclude-vaults '')
+  fi
+  assert_jq ".state == \"$expected_state\" and .items == [] and .warnings == [] and (.message|type) == \"string\"" "$classified_index" "index state for $scenario"
+done
+
+expired_index=$(MOCK_SCENARIO=expired "$HELPER" index --exclude-vaults '')
+assert_jq '.message == "Session expired — sign in again" and (tostring|contains("non-existent session")|not)' "$expired_index" "index sanitizes revoked-session stderr"
+
+rm "$TEST_BIN/pass-cli"
+missing_cli_index=$("$HELPER" index --exclude-vaults '')
+assert_jq '.state == "cli-missing" and .items == [] and .warnings == [] and .message == "Proton Pass CLI not found"' "$missing_cli_index" "index missing pass-cli"
+ln -s "$TEST_ROOT/tests/mocks/pass-cli" "$TEST_BIN/pass-cli"
 
 printf 'helper and mock harness tests passed\n'
