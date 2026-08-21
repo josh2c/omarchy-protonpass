@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SERVICE_SOURCE=$(<"$ROOT/Service.qml")
+PANEL_SOURCE=$(<"$ROOT/Panel.qml")
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 assert_contains() {
@@ -79,4 +80,52 @@ assert_not_contains 'console.warn(String(raw' \
 assert_not_contains 'console.log(' \
   "Service.qml writes unreviewed data to logs"
 
-printf 'service source contract tests passed\n'
+assert_panel_contains() {
+  [[ $PANEL_SOURCE == *"$1"* ]] || fail "$2"
+}
+
+assert_panel_contains 'focusTarget: search' \
+  "the panel does not open into search focus"
+assert_panel_contains 'blocked: search.activeFocus' \
+  "PanelKeyCatcher is not suspended while search owns text input"
+assert_panel_contains 'if (event.key === Qt.Key_Down)' \
+  "search does not intercept Down for list handoff"
+assert_panel_contains 'keyCatcher.forceActiveFocus()' \
+  "search cannot hand keyboard focus to list mode"
+assert_panel_contains 'root.copySelected("password")' \
+  "Enter does not copy the selected password"
+assert_panel_contains 'root.refocusSearch(event.text)' \
+  "printable list keys do not refocus search"
+assert_panel_contains 'root.refocusSearch("")' \
+  "slash does not refocus search without insertion"
+assert_panel_contains 'if (search.text !== "")' \
+  "Escape does not clear search before closing"
+assert_panel_contains '["omarchy", "launch", "terminal", "pass-cli", "login"]' \
+  "login is not launched through a fixed terminal argv array"
+assert_panel_contains '["omarchy", "launch", "terminal", "pass-cli", "session", "unlock"]' \
+  "unlock is not launched through a fixed terminal argv array"
+assert_panel_contains 'text: loginRow.modelData.title' \
+  "login titles are not rendered"
+assert_panel_contains 'text: loginRow.modelData.vaultName' \
+  "vault names are not rendered"
+[[ $(grep -A1 -E 'text: loginRow\.modelData\.(title|vaultName)' "$ROOT/Panel.qml" | grep -c 'textFormat: Text.PlainText') -eq 2 ]] || \
+  fail "every user-data render must use Text.PlainText"
+for state in MISSING_DEPS LOGGED_OUT LOCKED UNREACHABLE ERROR READY LOADING; do
+  [[ $PANEL_SOURCE == *"\"$state\""* ]] || fail "Panel.qml is missing the $state view"
+done
+assert_panel_contains 'text: "No login items found"' \
+  "the empty index view is missing"
+assert_panel_contains 'text: "No matches"' \
+  "the empty search-result view is missing"
+assert_panel_contains 'Showing cached list — refresh failed' \
+  "the stale-index warning is missing"
+assert_panel_contains 'interval: 3000' \
+  "copy feedback is not a three-second replacing toast"
+assert_panel_contains 'active: root.needsAttention' \
+  "the bar icon does not map user-action states to urgent tint"
+assert_panel_contains 'stdinEnabled: true' \
+  "setup commands are not copied over stdin"
+[[ $PANEL_SOURCE != *'--show-secrets'* ]] || fail "Panel.qml enables secret display"
+[[ $PANEL_SOURCE != *'property string password'* ]] || fail "Panel.qml can retain a password"
+
+printf 'service and panel source contract tests passed\n'
