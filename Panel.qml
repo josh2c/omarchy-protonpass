@@ -409,7 +409,6 @@ Panel {
 
             PanelActionButton {
               iconText: "󰑐"
-              iconSpinning: svc.refreshing
               tooltipText: "Refresh"
               Accessible.role: Accessible.Button
               Accessible.name: "Refresh Proton Pass"
