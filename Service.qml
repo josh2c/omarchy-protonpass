@@ -1,0 +1,475 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+
+// Headless Proton Pass service. Only non-secret item metadata crosses this
+// boundary; field values stay inside the helper and go directly to wl-copy.
+Item {
+    id: root
+
+    property var settings: ({})
+    property string state: "INIT"
+    property string message: ""
+    property var items: []
+    property var warnings: []
+    property string query: ""
+    property bool refreshing: false
+    property bool copyBusy: false
+    property bool staleWarning: false
+    property bool panelOpen: false
+    readonly property var filteredItems: filterItems(items, query)
+    readonly property bool hasIndex: _hasIndex
+
+    property bool _hasIndex: false
+    property bool _doctorReady: false
+    property bool _doctorContinueIndex: false
+    property int _indexGeneration: 0
+    property int _activeIndexGeneration: 0
+    property bool _indexPending: false
+    property string _doctorStdout: ""
+    property string _indexStdout: ""
+    property string _copyStdout: ""
+    property string _lockStdout: ""
+
+    signal toastRequested(string message)
+
+    function setting(name, fallback) {
+        var value = settings ? settings[name] : undefined;
+        return value === undefined || value === null ? fallback : value;
+    }
+
+    function intSetting(name, fallback, minimum, maximum) {
+        var value = parseInt(String(setting(name, fallback)), 10);
+        if (!isFinite(value))
+            value = fallback;
+        return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    function boolSetting(name, fallback) {
+        var value = setting(name, fallback);
+        if (value === true || value === false)
+            return value;
+        var text = String(value).toLowerCase();
+        return text === "true" || text === "yes" || text === "on" || text === "1";
+    }
+
+    function helperPath() {
+        var override = String(Quickshell.env("OMARCHY_PROTONPASS_HELPER") || "");
+        if (override !== "")
+            return override;
+        return Qt.resolvedUrl("omarchy-protonpass").toString().replace(/^file:\/\//, "");
+    }
+
+    function filterItems(source, text) {
+        var needle = String(text || "").toLocaleLowerCase();
+        if (needle === "")
+            return source;
+        return source.filter(function(item) {
+            return item.title.toLocaleLowerCase().indexOf(needle) !== -1
+                || item.vaultName.toLocaleLowerCase().indexOf(needle) !== -1;
+        });
+    }
+
+    function _isObject(value) {
+        return value !== null && typeof value === "object" && !Array.isArray(value);
+    }
+
+    function _isStringArray(value) {
+        if (!Array.isArray(value))
+            return false;
+        for (var i = 0; i < value.length; i++) {
+            if (typeof value[i] !== "string")
+                return false;
+        }
+        return true;
+    }
+
+    function _knownState(commandName, responseState) {
+        var states = {
+            doctor: ["ok", "missing-deps"],
+            index: ["ready", "cli-missing", "logged-out", "locked", "unreachable", "error"],
+            copy: ["copied", "no-field", "cli-missing", "logged-out", "locked", "unreachable", "error"],
+            lock: ["locked", "no-lock", "cli-missing", "logged-out", "unreachable", "error"]
+        };
+        return states[commandName] !== undefined && states[commandName].indexOf(responseState) !== -1;
+    }
+
+    // Returns a sanitized response or null. Never logs the response body:
+    // malformed bodies may be attacker-controlled and must not reach shell logs.
+    function _validatedResponse(raw, expectedCommand) {
+        var data;
+        try {
+            data = JSON.parse(String(raw || ""));
+        } catch (error) {
+            console.warn("omarchy-protonpass: malformed helper response (command=" + expectedCommand + ")");
+            return null;
+        }
+
+        if (!_isObject(data)
+                || data.schemaVersion !== 1
+                || data.command !== expectedCommand
+                || typeof data.state !== "string"
+                || !_knownState(expectedCommand, data.state)
+                || typeof data.message !== "string") {
+            console.warn("omarchy-protonpass: invalid helper envelope (command=" + expectedCommand + ")");
+            return null;
+        }
+
+        if (expectedCommand === "doctor") {
+            if (!_isObject(data.passCli)
+                    || typeof data.passCli.present !== "boolean"
+                    || typeof data.passCli.version !== "string"
+                    || !_isObject(data.wlClipboard)
+                    || typeof data.wlClipboard.present !== "boolean")
+                return null;
+        } else if (expectedCommand === "index") {
+            if (!Array.isArray(data.items) || !_isStringArray(data.warnings))
+                return null;
+            for (var i = 0; i < data.items.length; i++) {
+                var item = data.items[i];
+                if (!_isObject(item)
+                        || typeof item.itemId !== "string"
+                        || typeof item.shareId !== "string"
+                        || typeof item.vaultName !== "string"
+                        || typeof item.title !== "string")
+                    return null;
+            }
+        } else if (expectedCommand === "copy") {
+            if (["username", "password", "totp"].indexOf(data.field) === -1
+                    || typeof data.fallbackUsed !== "boolean"
+                    || typeof data.clearSeconds !== "number"
+                    || !isFinite(data.clearSeconds)
+                    || Math.floor(data.clearSeconds) !== data.clearSeconds
+                    || data.clearSeconds < 0
+                    || data.clearSeconds > 300)
+                return null;
+        }
+
+        return data;
+    }
+
+    function _programError() {
+        state = "ERROR";
+        message = "Something went wrong talking to pass-cli";
+        refreshing = false;
+        staleWarning = false;
+    }
+
+    function _clearIndex() {
+        // An auth transition is authoritative. Invalidate any older index so
+        // it cannot repopulate metadata after logout, lock, or session expiry.
+        _indexGeneration++;
+        _indexPending = false;
+        if (indexProcess.running)
+            indexProcess.running = false;
+        items = [];
+        warnings = [];
+        _hasIndex = false;
+        refreshing = false;
+        staleWarning = false;
+    }
+
+    function _authTransition(responseState, responseMessage) {
+        if (responseState === "logged-out") {
+            _clearIndex();
+            state = "LOGGED_OUT";
+            message = responseMessage;
+            return true;
+        }
+        if (responseState === "locked") {
+            _clearIndex();
+            state = "LOCKED";
+            message = responseMessage;
+            return true;
+        }
+        return false;
+    }
+
+    function _missingDependency(responseMessage) {
+        state = "MISSING_DEPS";
+        message = responseMessage;
+        refreshing = false;
+        staleWarning = false;
+        _doctorReady = false;
+    }
+
+    function runDoctor(continueWithIndex) {
+        _doctorContinueIndex = _doctorContinueIndex || continueWithIndex;
+        if (doctorProcess.running)
+            return;
+        _doctorStdout = "";
+        doctorProcess.command = [helperPath(), "doctor"];
+        doctorProcess.running = true;
+    }
+
+    function _launchIndex() {
+        if (!panelOpen || indexProcess.running)
+            return;
+        _indexPending = false;
+        _activeIndexGeneration = _indexGeneration;
+        _indexStdout = "";
+        indexProcess.command = [helperPath(), "index", "--exclude-vaults", String(setting("excludeVaults", ""))];
+        indexProcess.running = true;
+    }
+
+    function refresh() {
+        if (!panelOpen)
+            return;
+
+        _indexGeneration++;
+        staleWarning = false;
+        if (_hasIndex) {
+            state = "READY";
+            refreshing = true;
+        } else {
+            state = "LOADING";
+            refreshing = false;
+        }
+
+        if (indexProcess.running) {
+            _indexPending = true;
+            indexProcess.running = false;
+            return;
+        }
+        _launchIndex();
+    }
+
+    function retry() {
+        refresh();
+    }
+
+    function recheck() {
+        runDoctor(true);
+    }
+
+    function onPanelOpened() {
+        if (panelOpen)
+            return;
+        panelOpen = true;
+
+        if (state === "MISSING_DEPS") {
+            runDoctor(true);
+        } else if (!_doctorReady) {
+            runDoctor(true);
+        } else if (state === "LOADING" && indexProcess.running
+                && _activeIndexGeneration !== _indexGeneration) {
+            // The panel reopened while a close-triggered SIGTERM was still in
+            // flight. Start the current generation as soon as it exits.
+            _indexPending = true;
+        } else if (state !== "LOADING" || !indexProcess.running) {
+            refresh();
+        }
+    }
+
+    function onPanelClosed() {
+        panelOpen = false;
+        _doctorContinueIndex = false;
+        _indexPending = false;
+        if (indexProcess.running) {
+            // Invalidate before SIGTERM so onExited cannot publish stale data.
+            _indexGeneration++;
+            indexProcess.running = false;
+        }
+        refreshing = false;
+        // Copy and lock processes intentionally continue to completion.
+    }
+
+    function copy(shareId, itemId, field) {
+        var share = String(shareId || "");
+        var item = String(itemId || "");
+        var requestedField = String(field || "");
+        if (copyBusy
+                || !/^[A-Za-z0-9+/=_-]{1,256}$/.test(share)
+                || !/^[A-Za-z0-9+/=_-]{1,256}$/.test(item)
+                || ["username", "password", "totp"].indexOf(requestedField) === -1)
+            return false;
+
+        var commandLine = [helperPath(), "copy", "--share-id", share, "--item-id", item,
+            "--field", requestedField, "--clear-seconds", String(intSetting("clipboardClearSeconds", 45, 0, 300))];
+        if (boolSetting("pasteOnce", false))
+            commandLine.push("--paste-once");
+
+        _copyStdout = "";
+        copyProcess.command = commandLine;
+        copyBusy = true;
+        copyProcess.running = true;
+        return true;
+    }
+
+    function lock() {
+        if (lockProcess.running)
+            return false;
+        _lockStdout = "";
+        lockProcess.command = [helperPath(), "lock"];
+        lockProcess.running = true;
+        return true;
+    }
+
+    function _copyToast(response) {
+        if (response.state === "no-field") {
+            return response.field === "totp"
+                ? "No TOTP on this item"
+                : "No username or email on this item";
+        }
+        if (response.state !== "copied")
+            return "Copy failed — check connection and try again";
+
+        var label = response.field === "password" ? "Password"
+            : response.field === "totp" ? "TOTP"
+            : response.fallbackUsed ? "Email" : "Username";
+        return label + " copied" + (response.clearSeconds > 0 ? " — clears in " + response.clearSeconds + "s" : "");
+    }
+
+    visible: false
+
+    Component.onCompleted: root.runDoctor(false)
+
+    Process {
+        id: doctorProcess
+        running: false
+        command: []
+        onExited: function(exitCode) {
+            var shouldIndex = root._doctorContinueIndex;
+            root._doctorContinueIndex = false;
+            var response = root._validatedResponse(String(doctorOutput.text || root._doctorStdout || ""), "doctor");
+            if (exitCode !== 0 || response === null) {
+                root._doctorReady = false;
+                root._programError();
+                return;
+            }
+            if (response.state === "missing-deps") {
+                root._doctorReady = false;
+                root.state = "MISSING_DEPS";
+                root.message = response.message;
+                return;
+            }
+            root._doctorReady = true;
+            root.state = "INIT";
+            root.message = response.message;
+            if (shouldIndex && root.panelOpen)
+                Qt.callLater(root.refresh);
+        }
+        stdout: StdioCollector {
+            id: doctorOutput
+            waitForEnd: true
+            onStreamFinished: root._doctorStdout = text
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: indexProcess
+        running: false
+        command: []
+        onExited: function(exitCode) {
+            var responseGeneration = root._activeIndexGeneration;
+            var pending = root._indexPending;
+            if (responseGeneration !== root._indexGeneration) {
+                if (pending && root.panelOpen)
+                    Qt.callLater(root._launchIndex);
+                return;
+            }
+
+            root.refreshing = false;
+            var response = root._validatedResponse(String(indexOutput.text || root._indexStdout || ""), "index");
+            if (exitCode !== 0 || response === null) {
+                root._programError();
+            } else if (response.state === "ready") {
+                var cleanItems = [];
+                for (var i = 0; i < response.items.length; i++) {
+                    cleanItems.push({
+                        itemId: response.items[i].itemId,
+                        shareId: response.items[i].shareId,
+                        vaultName: response.items[i].vaultName,
+                        title: response.items[i].title
+                    });
+                }
+                root.items = cleanItems;
+                root.warnings = response.warnings.slice();
+                root._hasIndex = true;
+                root.state = "READY";
+                root.message = response.message;
+                root.staleWarning = false;
+            } else if (root._authTransition(response.state, response.message)) {
+            } else if (response.state === "cli-missing") {
+                root._missingDependency(response.message);
+            } else if (root._hasIndex && (response.state === "unreachable" || response.state === "error")) {
+                root.state = "READY";
+                root.message = response.message;
+                root.staleWarning = true;
+            } else {
+                root.state = response.state === "unreachable" ? "UNREACHABLE" : "ERROR";
+                root.message = response.message;
+                root.staleWarning = false;
+            }
+        }
+        stdout: StdioCollector {
+            id: indexOutput
+            waitForEnd: true
+            onStreamFinished: root._indexStdout = text
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: copyProcess
+        running: false
+        command: []
+        onExited: function(exitCode) {
+            root.copyBusy = false;
+            var response = root._validatedResponse(String(copyOutput.text || root._copyStdout || ""), "copy");
+            if (exitCode !== 0 || response === null) {
+                root._programError();
+                if (root.panelOpen)
+                    root.toastRequested("Copy failed — check connection and try again");
+                return;
+            }
+            if (root._authTransition(response.state, response.message))
+                return;
+            if (response.state === "cli-missing") {
+                root._missingDependency(response.message);
+                return;
+            }
+            if (root.panelOpen)
+                root.toastRequested(root._copyToast(response));
+        }
+        stdout: StdioCollector {
+            id: copyOutput
+            waitForEnd: true
+            onStreamFinished: root._copyStdout = text
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: lockProcess
+        running: false
+        command: []
+        onExited: function(exitCode) {
+            var response = root._validatedResponse(String(lockOutput.text || root._lockStdout || ""), "lock");
+            if (exitCode !== 0 || response === null) {
+                root._programError();
+                return;
+            }
+            if (response.state === "locked") {
+                root._clearIndex();
+                root.state = "LOCKED";
+                root.message = response.message;
+            } else if (root._authTransition(response.state, response.message)) {
+            } else if (response.state === "cli-missing") {
+                root._missingDependency(response.message);
+            } else if (response.state === "no-lock") {
+                if (root.panelOpen)
+                    root.toastRequested("No session lock configured — run pass-cli session create-lock");
+            } else if (root.panelOpen) {
+                root.toastRequested("Could not lock Proton Pass");
+            }
+        }
+        stdout: StdioCollector {
+            id: lockOutput
+            waitForEnd: true
+            onStreamFinished: root._lockStdout = text
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+}
