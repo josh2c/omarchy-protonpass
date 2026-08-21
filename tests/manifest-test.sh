@@ -10,6 +10,8 @@ fail() {
 }
 
 jq -e . "$MANIFEST" >/dev/null || fail "manifest.json is not valid JSON"
+jq -e '.version == "1.2.0"' "$MANIFEST" >/dev/null || \
+  fail "manifest version is not prepared for the 1.2.0 release"
 
 while IFS= read -r entry_point; do
   [[ -f "$ROOT/$entry_point" ]] || fail "referenced entry point does not exist: $entry_point"

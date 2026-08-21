@@ -20,6 +20,7 @@ jobs:
 
     steps:
       - name: Check out source
+        timeout-minutes: 2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 1
@@ -30,6 +31,7 @@ jobs:
       # a network-backed install. Test execution is account-free and runs with
       # networking disabled below.
       - name: Verify test dependencies
+        timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
@@ -41,30 +43,36 @@ jobs:
           done
 
       - name: Check Bash syntax offline
+        timeout-minutes: 2
         shell: bash
         run: |
           sudo unshare --net -- \
             bash -n omarchy-protonpass tests/*.sh tests/mocks/*
 
       - name: Run ShellCheck offline
+        timeout-minutes: 2
         shell: bash
         run: |
           sudo unshare --net -- \
             shellcheck omarchy-protonpass tests/*.sh tests/mocks/*
 
       - name: Test manifest structure offline
+        timeout-minutes: 2
         shell: bash
         run: sudo unshare --net -- tests/manifest-test.sh
 
       - name: Test helper behavior offline
+        timeout-minutes: 2
         shell: bash
         run: sudo unshare --net -- tests/helper-test.sh
 
       - name: Test security invariants offline
+        timeout-minutes: 2
         shell: bash
         run: sudo unshare --net -- tests/security-test.sh
 
       - name: Test QML source contracts offline
+        timeout-minutes: 2
         shell: bash
         run: sudo unshare --net -- tests/source-contract-test.sh
 
@@ -72,6 +80,7 @@ jobs:
       # boundary. This step must fail after a secret-retaining QML property is
       # seeded; the following step turns an unexpected pass into a CI failure.
       - name: Seeded security violation is rejected
+        timeout-minutes: 2
         id: seeded_security_violation
         continue-on-error: true
         shell: bash
@@ -80,6 +89,7 @@ jobs:
           sudo unshare --net -- tests/security-test.sh
 
       - name: Assert seeded violation failed
+        timeout-minutes: 2
         if: always()
         shell: bash
         env:

@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SERVICE_SOURCE=$(<"$ROOT/Service.qml")
 PANEL_SOURCE=$(<"$ROOT/Panel.qml")
+README_SOURCE=$(<"$ROOT/README.md")
+ACCEPTANCE_SOURCE=$(<"$ROOT/T12-ACCEPTANCE.md")
+CI_SOURCE=$(<"$ROOT/.github/workflows/ci.yml")
 
 command -v node >/dev/null || {
   printf 'FAIL: node is required for keybind parser assertions\n' >&2
@@ -188,7 +191,7 @@ assert_panel_contains 'text: "No login items found"' \
   "the empty index view is missing"
 assert_panel_contains 'text: "No matches"' \
   "the empty search-result view is missing"
-assert_panel_contains 'Showing cached list — refresh failed' \
+assert_panel_contains 'cached — refresh failed' \
   "the stale-index warning is missing"
 assert_panel_contains '" · " + syncedAgeText()' \
   "the header does not show the client-side sync age"
@@ -296,9 +299,78 @@ assert_panel_contains 'Accessible.role: Accessible.AlertMessage' \
   "copy feedback is not exposed as an accessible alert"
 assert_panel_contains 'Accessible.name: text' \
   "the logout action does not announce its armed label"
-assert_panel_contains 'text: svc.staleWarning ? "Showing cached list — refresh failed" : "Refreshing…"' \
-  "refresh activity is conveyed only through animation"
+assert_panel_contains 'svc.staleWarning ? " · cached — refresh failed" : (svc.refreshing ? " · refreshing" : "")' \
+  "refresh activity is not conveyed in the header status text"
+assert_panel_contains 'trailingControl: Component {' \
+  "session actions are not attached to the fixed header"
+assert_panel_contains 'id: headerActions' \
+  "the header action row is missing"
+assert_panel_contains $'anchors.top: panelHeader.bottom\n        anchors.topMargin: Style.space(12)' \
+  "the scrolling body is not anchored below the fixed header"
+assert_panel_contains 'id: itemListFlick' \
+  "the login list has no independent scroll viewport"
+assert_panel_contains 'implicitHeight: Math.min(itemListContent.implicitHeight, Style.space(300))' \
+  "the login list height is not capped"
+assert_panel_contains 'contentHeight: itemListContent.implicitHeight' \
+  "the capped login list cannot scroll its full content"
+assert_panel_contains 'var maxY = Math.max(0, itemListFlick.contentHeight - itemListFlick.height)' \
+  "keyboard selection does not scroll the internal login viewport"
+assert_panel_not_contains 'id: footerActions' \
+  "session controls remain in the footer"
+header_actions_match=$(grep -n 'id: headerActions' "$ROOT/Panel.qml")
+item_list_match=$(grep -n 'id: itemListFlick' "$ROOT/Panel.qml")
+toast_match=$(grep -n 'id: toastContent' "$ROOT/Panel.qml")
+countdown_match=$(grep -n 'id: countdownText' "$ROOT/Panel.qml")
+header_actions_line=${header_actions_match%%:*}
+item_list_line=${item_list_match%%:*}
+toast_line=${toast_match%%:*}
+countdown_line=${countdown_match%%:*}
+[[ $header_actions_line -lt $item_list_line
+    && $item_list_line -lt $toast_line
+    && $toast_line -lt $countdown_line ]] || \
+  fail "header controls and footer feedback are not in their fixed regions"
 [[ $PANEL_SOURCE != *'--show-secrets'* ]] || fail "Panel.qml enables secret display"
 [[ $PANEL_SOURCE != *'property string password'* ]] || fail "Panel.qml can retain a password"
+
+for required_readme_text in \
+  '## Create a login' \
+  'long login lists scroll independently' \
+  'use an official Proton Pass app' \
+  'sole shortcut reference' \
+  '`Ctrl+U`' \
+  '`Ctrl+P`' \
+  '`Ctrl+T`' \
+  '`Ctrl+R`' \
+  '`Ctrl+L`' \
+  '`Ctrl+Shift+X`' \
+  'ctrl+shift+c:copy-password,ctrl+o:logout' \
+  'contains opaque item/share IDs and timestamps only' \
+  'turning it off deletes the local recents store immediately'; do
+  [[ $README_SOURCE == *"$required_readme_text"* ]] || \
+    fail "README is missing required release documentation: $required_readme_text"
+done
+[[ $README_SOURCE == *'[combined 1.2.0 acceptance checklist](T12-ACCEPTANCE.md)'* ]] || \
+  fail "README does not link the combined release gate"
+
+for required_acceptance_text in \
+  'single combined v1.0 + v1.1 + v1.2 release gate' \
+  'With search focused and text already entered' \
+  'at least 3× one viewport of login rows' \
+  'recents.json` is deleted immediately' \
+  'used X ago' \
+  'no hover tooltips, shortcut labels, or footer shortcut legend' \
+  'With Orca running' \
+  'empty vault with no logins' \
+  'Choose **Copy password** in the success message' \
+  'git tag -s 1.2.0'; do
+  [[ $ACCEPTANCE_SOURCE == *"$required_acceptance_text"* ]] || \
+    fail "combined acceptance checklist is missing: $required_acceptance_text"
+done
+
+ci_step_count=$(grep -c '^      - name:' "$ROOT/.github/workflows/ci.yml")
+ci_step_timeout_count=$(grep -c '^        timeout-minutes: 2$' "$ROOT/.github/workflows/ci.yml")
+[[ $ci_step_count -eq 10 && $ci_step_timeout_count -eq $ci_step_count ]] || \
+  fail "every CI step must have the two-minute timeout"
+[[ $CI_SOURCE == *'timeout-minutes: 10'* ]] || fail "the CI job timeout is missing"
 
 printf 'service and panel source contract tests passed\n'

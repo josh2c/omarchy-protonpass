@@ -69,16 +69,16 @@ Panel {
       var row = root.cursorIndex < recentCount
         ? recentRepeater.itemAt(root.cursorIndex)
         : itemRepeater.itemAt(root.cursorIndex - recentCount)
-      if (!row || !panelFlick) return
-      var point = row.mapToItem(panelFlick.contentItem, 0, 0)
+      if (!row || !itemListFlick) return
+      var point = row.mapToItem(itemListFlick.contentItem, 0, 0)
       var margin = Style.space(8)
       var top = point.y
       var bottom = top + row.height
-      var maxY = Math.max(0, panelFlick.contentHeight - panelFlick.height)
-      if (top < panelFlick.contentY + margin)
-        panelFlick.contentY = Math.max(0, top - margin)
-      else if (bottom > panelFlick.contentY + panelFlick.height - margin)
-        panelFlick.contentY = Math.min(maxY, bottom + margin - panelFlick.height)
+      var maxY = Math.max(0, itemListFlick.contentHeight - itemListFlick.height)
+      if (top < itemListFlick.contentY + margin)
+        itemListFlick.contentY = Math.max(0, top - margin)
+      else if (bottom > itemListFlick.contentY + itemListFlick.height - margin)
+        itemListFlick.contentY = Math.min(maxY, bottom + margin - itemListFlick.height)
     })
   }
 
@@ -238,6 +238,7 @@ Panel {
       cursorIndex = 0
       search.clear()
       panelFlick.contentY = 0
+      itemListFlick.contentY = 0
       svc.onPanelOpened()
       Qt.callLater(function() { search.forceActiveFocus() })
     } else {
@@ -332,7 +333,8 @@ Panel {
     open: root.opened
     focusTarget: search
     contentWidth: panel.fittedContentWidth(Style.space(430))
-    contentHeight: panel.fittedContentHeight(content.implicitHeight, Style.space(620))
+    contentHeight: panel.fittedContentHeight(
+      panelHeader.implicitHeight + Style.space(12) + content.implicitHeight, Style.space(620))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -384,9 +386,95 @@ Panel {
         }
       }
 
+      PanelHero {
+        id: panelHeader
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        title: "Proton Pass"
+        meta: svc.state === "READY"
+          ? root.headerStatusText()
+            + (svc.staleWarning ? " · cached — refresh failed" : (svc.refreshing ? " · refreshing" : ""))
+          : (svc.message !== "" ? svc.message : "Checking pass-cli…")
+        detail: svc.state === "READY" && search.text !== ""
+          ? svc.filteredItems.length + (svc.filteredItems.length === 1 ? " match" : " matches")
+          : ""
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        trailingControl: Component {
+          Row {
+            id: headerActions
+            visible: svc.state === "READY"
+            spacing: Style.space(2)
+
+            PanelActionButton {
+              iconText: "󰑐"
+              iconSpinning: svc.refreshing
+              tooltipText: "Refresh"
+              Accessible.role: Accessible.Button
+              Accessible.name: "Refresh Proton Pass"
+              enabled: !svc.refreshing
+              onClicked: svc.refresh()
+            }
+            PanelActionButton {
+              iconText: ""
+              tooltipText: root.createFormOpen ? "Close create form" : "Create login"
+              Accessible.role: Accessible.Button
+              Accessible.name: tooltipText
+              enabled: root.createControlsEnabled && svc.vaults.length > 0
+              focusable: true
+              onClicked: {
+                if (root.createFormOpen) {
+                  root.closeCreateForm()
+                  search.forceActiveFocus()
+                } else {
+                  root.openCreateForm()
+                }
+              }
+            }
+            PanelActionButton {
+              iconText: "󰌾"
+              tooltipText: "Lock Proton Pass"
+              Accessible.role: Accessible.Button
+              Accessible.name: "Lock Proton Pass"
+              onClicked: svc.lock()
+            }
+            Button {
+              property real reservedWidth: 0
+              onImplicitWidthChanged: reservedWidth = Math.max(reservedWidth, implicitWidth)
+              width: Math.max(reservedWidth, implicitWidth)
+              text: svc.logoutBusy ? "Logging out…" : (root.logoutArmed ? "Confirm log out" : "Log out")
+              enabled: !svc.logoutBusy
+              foreground: root.logoutArmed ? root.urgent : root.foreground
+              fontFamily: root.fontFamily
+              fontSize: Style.font.caption
+              verticalPadding: Style.spacing.controlPaddingY
+              Accessible.role: Accessible.Button
+              Accessible.name: text
+              onClicked: root.requestLogout()
+            }
+          }
+        }
+        iconComponent: Component {
+          Text {
+            text: "󰌆"
+            textFormat: Text.PlainText
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.display
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+          }
+        }
+      }
+
       Flickable {
         id: panelFlick
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: panelHeader.bottom
+        anchors.topMargin: Style.space(12)
+        anchors.bottom: parent.bottom
         contentWidth: width
         contentHeight: content.implicitHeight
         clip: true
@@ -400,77 +488,6 @@ Panel {
           width: panelFlick.width
           spacing: Style.space(12)
 
-          PanelHero {
-            width: parent.width
-            title: "Proton Pass"
-            meta: svc.state === "READY"
-              ? root.headerStatusText()
-              : (svc.message !== "" ? svc.message : "Checking pass-cli…")
-            detail: svc.state === "READY" && search.text !== ""
-              ? svc.filteredItems.length + (svc.filteredItems.length === 1 ? " match" : " matches")
-              : ""
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            iconComponent: Component {
-              Text {
-                text: "󰌆"
-                textFormat: Text.PlainText
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.display
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-              }
-            }
-          }
-
-          BorderSurface {
-            visible: root.toastText !== ""
-            width: parent.width
-            implicitHeight: toastContent.implicitHeight + Style.space(18)
-            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
-            borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.20), 1)
-            radius: Style.cornerRadius
-            Accessible.role: Accessible.AlertMessage
-            Accessible.name: root.toastText
-
-            Row {
-              id: toastContent
-              anchors.centerIn: parent
-              width: parent.width - Style.space(20)
-              spacing: Style.space(8)
-
-              Text {
-                id: toastLabel
-                width: Math.max(1, parent.width - (copyCreatedPassword.visible
-                  ? copyCreatedPassword.width + parent.spacing : 0))
-                anchors.verticalCenter: parent.verticalCenter
-                text: root.toastText
-                textFormat: Text.PlainText
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
-                horizontalAlignment: copyCreatedPassword.visible ? Text.AlignLeft : Text.AlignHCenter
-                wrapMode: Text.WordWrap
-              }
-
-              Button {
-                id: copyCreatedPassword
-                visible: root.createdShareId !== "" && root.createdItemId !== ""
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Copy password"
-                enabled: root.createControlsEnabled
-                focusable: true
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                Accessible.role: Accessible.Button
-                Accessible.name: "Copy password for created login"
-                onClicked: svc.copy(root.createdShareId, root.createdItemId, "password")
-              }
-            }
-          }
-
           TextField {
             id: search
             visible: svc.state === "READY"
@@ -482,6 +499,7 @@ Panel {
               svc.query = text
               root.cursorActive = false
               root.cursorIndex = 0
+              itemListFlick.contentY = 0
             }
 
             Keys.priority: Keys.BeforeItem
@@ -699,10 +717,24 @@ Panel {
             }
           }
 
-          Column {
+          Flickable {
+            id: itemListFlick
             visible: svc.state === "READY"
             width: parent.width
-            spacing: Style.space(4)
+            implicitHeight: Math.min(itemListContent.implicitHeight, Style.space(300))
+            height: implicitHeight
+            contentWidth: width
+            contentHeight: itemListContent.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            interactive: contentHeight > height
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            Column {
+              id: itemListContent
+              width: itemListFlick.width
+              spacing: Style.space(4)
 
             Text {
               visible: svc.items.length === 0
@@ -770,10 +802,10 @@ Panel {
               delegate: loginRowDelegate
             }
 
-            Component {
-              id: loginRowDelegate
+              Component {
+                id: loginRowDelegate
 
-              CursorSurface {
+                CursorSurface {
                 id: loginRow
                 required property var modelData
                 required property int index
@@ -873,6 +905,7 @@ Panel {
                       onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "totp")
                     }
                   }
+                }
                 }
               }
             }
@@ -1120,6 +1153,53 @@ Panel {
           }
 
           BorderSurface {
+            visible: root.toastText !== ""
+            width: parent.width
+            implicitHeight: toastContent.implicitHeight + Style.space(18)
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+            borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.20), 1)
+            radius: Style.cornerRadius
+            Accessible.role: Accessible.AlertMessage
+            Accessible.name: root.toastText
+
+            Row {
+              id: toastContent
+              anchors.centerIn: parent
+              width: parent.width - Style.space(20)
+              spacing: Style.space(8)
+
+              Text {
+                id: toastLabel
+                width: Math.max(1, parent.width - (copyCreatedPassword.visible
+                  ? copyCreatedPassword.width + parent.spacing : 0))
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.toastText
+                textFormat: Text.PlainText
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                horizontalAlignment: copyCreatedPassword.visible ? Text.AlignLeft : Text.AlignHCenter
+                wrapMode: Text.WordWrap
+              }
+
+              Button {
+                id: copyCreatedPassword
+                visible: root.createdShareId !== "" && root.createdItemId !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Copy password"
+                enabled: root.createControlsEnabled
+                focusable: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                Accessible.role: Accessible.Button
+                Accessible.name: "Copy password for created login"
+                onClicked: svc.copy(root.createdShareId, root.createdItemId, "password")
+              }
+            }
+          }
+
+          BorderSurface {
             visible: svc.state === "READY" && svc.clipboardCountdownActive
             width: parent.width
             implicitHeight: countdownText.implicitHeight + Style.space(14)
@@ -1171,94 +1251,6 @@ Panel {
             }
           }
 
-          Row {
-            visible: svc.state === "READY"
-            width: parent.width
-            spacing: Style.space(8)
-
-            Column {
-              width: parent.width - footerActions.width - parent.spacing
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-                visible: svc.staleWarning || svc.refreshing
-                width: parent.width
-                text: svc.staleWarning ? "Showing cached list — refresh failed" : "Refreshing…"
-                textFormat: Text.PlainText
-                color: svc.staleWarning ? root.urgent : root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WordWrap
-              }
-            }
-
-            Row {
-              id: footerActions
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-              Text {
-                visible: svc.refreshing
-                text: "↻"
-                textFormat: Text.PlainText
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.icon
-                RotationAnimation on rotation {
-                  from: 0
-                  to: 360
-                  duration: 900
-                  loops: Animation.Infinite
-                  running: svc.refreshing
-                }
-              }
-              PanelActionButton {
-                iconText: "󰑐"
-                tooltipText: "Refresh"
-                Accessible.role: Accessible.Button
-                Accessible.name: "Refresh Proton Pass"
-                enabled: !svc.refreshing
-                onClicked: svc.refresh()
-              }
-              PanelActionButton {
-                iconText: ""
-                tooltipText: root.createFormOpen ? "Close create form" : "Create login"
-                Accessible.role: Accessible.Button
-                Accessible.name: tooltipText
-                enabled: root.createControlsEnabled && svc.vaults.length > 0
-                focusable: true
-                onClicked: {
-                  if (root.createFormOpen) {
-                    root.closeCreateForm()
-                    search.forceActiveFocus()
-                  } else {
-                    root.openCreateForm()
-                  }
-                }
-              }
-              PanelActionButton {
-                iconText: "󰌾"
-                tooltipText: "Lock Proton Pass"
-                Accessible.role: Accessible.Button
-                Accessible.name: "Lock Proton Pass"
-                onClicked: svc.lock()
-              }
-              Button {
-                property real reservedWidth: 0
-                onImplicitWidthChanged: reservedWidth = Math.max(reservedWidth, implicitWidth)
-                width: Math.max(reservedWidth, implicitWidth)
-                text: svc.logoutBusy ? "Logging out…" : (root.logoutArmed ? "Confirm log out" : "Log out")
-                enabled: !svc.logoutBusy
-                foreground: root.logoutArmed ? root.urgent : root.foreground
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                verticalPadding: Style.spacing.controlPaddingY
-                Accessible.role: Accessible.Button
-                Accessible.name: text
-                onClicked: root.requestLogout()
-              }
-            }
-          }
         }
       }
     }

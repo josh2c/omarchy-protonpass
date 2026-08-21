@@ -1,6 +1,6 @@
 # omarchy-protonpass — v1 Implementation Plan
 
-Status: v1.0+v1.1 built; v1.2 addendum (rev 4.2) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
+Status: v1.0+v1.1 built; v1.2 addendum (rev 4.3) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
 
 All product, architecture, security, and scope decisions are resolved. Facts verified against a live Omarchy 4.x install (`/usr/share/omarchy/shell`, `/usr/bin/omarchy-plugin-validate`), a clone of `robzolkos/omarchy-github`, and the `protonpass/pass-cli` Rust source (v2.3.2, 2026-08). The §2.2 manifest passes `omarchy-plugin-validate` verbatim (tested).
 
@@ -422,7 +422,7 @@ Unchanged: secrets/usernames never in QML; argv/env/log rules; terminal-only aut
 
 ---
 
-# v1.2 Refinements Addendum (rev 4.2)
+# v1.2 Refinements Addendum (rev 4.3)
 
 Field-feedback pass. All v1.0/v1.1 security rules stand; usernames remain hidden (decided — rows stay identifier-free; vault name disambiguates).
 
@@ -453,3 +453,5 @@ Order: T20 first (contract), T21/T22 parallel anytime, T23 after T20, T24 last. 
 ## B4. Security notes
 
 Create introduces the first **write** path. Mitigations: stdin-only fields (no argv), strict input walls both sides, helper-side generation with immediate variable wipe (same transient class as the copy path — rev 4.1), no user-chosen secrets anywhere in our surfaces, and the panel form holds only non-secret fields. No new files, env vars, or retention. Abuse surface (a malicious co-resident plugin invoking create) is unchanged in kind from existing copy/lock — same-UID actors already hold full CLI access; documented in README's residual risks.
+
+**Rev 4.3 (field defect F1 — control placement):** the action row (refresh / new login / lock / logout) rendered below the item list, which grows with content — long vaults bury the controls behind a full scroll. Fix, folded into T24: (1) the item list is height-capped and scrolls internally; the panel never grows past its maximum height because of items. (2) Session controls move to the fixed header row, right-aligned beside the status line ("N logins · synced Xm ago" left, refresh · new · lock · logout right) — matching the top-of-panel convention of comparable tools; the two-step logout confirm behaves identically in its new position. (3) The footer is reserved for the clipboard countdown/toast only. Acceptance addition: with 3× viewport items, all four controls are visible and clickable without scrolling.
