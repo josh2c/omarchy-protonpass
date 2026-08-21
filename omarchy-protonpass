@@ -1,21 +1,309 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 1 || $1 != doctor ]]; then
+readonly DOCTOR_TIMEOUT_SECONDS=5
+
+emit_dispatch_error() {
   jq -cn '{
     schemaVersion: 1,
-    command: "doctor",
+    command: "unknown",
     state: "error",
     message: "Invalid helper arguments"
   }'
-  exit 2
-fi
+}
 
-jq -cn '{
-  schemaVersion: 1,
-  command: "doctor",
-  state: "missing-deps",
-  message: "Helper scaffold; dependency checks are not implemented yet",
-  passCli: {present: false, version: ""},
-  wlClipboard: {present: false}
-}'
+emit_command_error() {
+  local command_name=$1
+  jq -cn --arg command "$command_name" '{
+    schemaVersion: 1,
+    command: $command,
+    state: "error",
+    message: "Invalid helper arguments"
+  }'
+}
+
+emit_doctor() {
+  local state=$1 message=$2 pass_present=$3 version=$4 clipboard_present=$5
+  jq -cn \
+    --arg state "$state" \
+    --arg message "$message" \
+    --argjson passPresent "$pass_present" \
+    --arg version "$version" \
+    --argjson clipboardPresent "$clipboard_present" \
+    '{
+      schemaVersion: 1,
+      command: "doctor",
+      state: $state,
+      message: $message,
+      passCli: {present: $passPresent, version: $version},
+      wlClipboard: {present: $clipboardPresent}
+    }'
+}
+
+emit_index_stub() {
+  jq -cn '{
+    schemaVersion: 1,
+    command: "index",
+    state: "error",
+    message: "Index is not implemented yet",
+    items: [],
+    warnings: []
+  }'
+}
+
+emit_copy_stub() {
+  local field=$1 clear_seconds=$2
+  jq -cn --arg field "$field" --argjson clearSeconds "$clear_seconds" '{
+    schemaVersion: 1,
+    command: "copy",
+    state: "error",
+    message: "Copy is not implemented yet",
+    field: $field,
+    fallbackUsed: false,
+    clearSeconds: $clearSeconds
+  }'
+}
+
+emit_lock_stub() {
+  jq -cn '{
+    schemaVersion: 1,
+    command: "lock",
+    state: "error",
+    message: "Lock is not implemented yet"
+  }'
+}
+
+run_pass_cli() {
+  local timeout_seconds=$1
+  shift
+  PASS_LOG_LEVEL=off MUON_LOG_LEVEL=off \
+    timeout --foreground "${timeout_seconds}s" pass-cli "$@"
+}
+
+# Outputs are globals so callers can classify without reparsing or serializing stderr.
+# shellcheck disable=SC2034
+classify_failure() {
+  local command_name=$1 status=$2 stderr_blob=$3
+  local folded=${stderr_blob,,}
+
+  CLASSIFIED_STATE=error
+  CLASSIFIED_KIND=unknown
+  CLASSIFIED_MESSAGE="Something went wrong talking to pass-cli"
+
+  if ! command -v pass-cli >/dev/null 2>&1; then
+    CLASSIFIED_STATE=cli-missing
+    CLASSIFIED_KIND=cli-missing
+    CLASSIFIED_MESSAGE="Proton Pass CLI not found"
+  elif [[ $folded == *"session has been invalidated"* ||
+          $folded == *"log in again"* ||
+          $folded == *"non-existent session"* ]]; then
+    CLASSIFIED_STATE=logged-out
+    CLASSIFIED_KIND=session-expired
+    CLASSIFIED_MESSAGE="Session expired — sign in again"
+  elif [[ $folded == *"requires an authenticated client"* ||
+          $folded == *"no active session"* ]]; then
+    CLASSIFIED_STATE=logged-out
+    CLASSIFIED_KIND=logged-out
+    CLASSIFIED_MESSAGE="Not signed in to Proton Pass"
+  elif [[ $folded == *"session is locked"* ]]; then
+    CLASSIFIED_STATE=locked
+    CLASSIFIED_KIND=locked
+    CLASSIFIED_MESSAGE="Session locked"
+  elif [[ $command_name == lock &&
+          ( $folded == *"session is not locked"* ||
+            $folded == *"session has no lock"* ||
+            $folded == *"create one first with"* ) ]]; then
+    CLASSIFIED_STATE=no-lock
+    CLASSIFIED_KIND=no-lock
+    CLASSIFIED_MESSAGE="No session lock configured — run pass-cli session create-lock"
+  elif [[ $command_name == copy &&
+          ( $folded == *"field does not exist"* ||
+            $folded == *"no totp fields found in this item"* ) ]]; then
+    CLASSIFIED_STATE=no-field
+    CLASSIFIED_KIND=no-field
+    CLASSIFIED_MESSAGE="Requested field is not available"
+  elif [[ ( $status -eq 124 && -z $stderr_blob ) ||
+          $folded == *"network is unreachable"* ||
+          $folded == *"failed to connect"* ||
+          $folded == *"error while connecting"* ||
+          $folded == *"name or service not known"* ||
+          $folded == *"temporary failure in name resolution"* ||
+          $folded == *"dns error"* ||
+          $folded == *"connection refused"* ||
+          $folded == *"connection reset"* ||
+          $folded == *"connection timed out"* ]]; then
+    CLASSIFIED_STATE=unreachable
+    if [[ $status -eq 124 && -z $stderr_blob ]]; then
+      CLASSIFIED_KIND=timeout
+      CLASSIFIED_MESSAGE="Proton Pass CLI timed out"
+    else
+      CLASSIFIED_KIND=network
+      CLASSIFIED_MESSAGE="Can't reach Proton"
+    fi
+  fi
+}
+
+valid_id() {
+  [[ $1 =~ ^[A-Za-z0-9+/=_-]{1,256}$ ]]
+}
+
+normalize_clear_seconds() {
+  local raw=$1 normalized
+  [[ $raw =~ ^[0-9]+$ ]] || return 1
+  normalized=${raw#"${raw%%[!0]*}"}
+  [[ -n $normalized ]] || normalized=0
+  (( ${#normalized} <= 3 )) || return 1
+  (( 10#$normalized <= 300 )) || return 1
+  NORMALIZED_CLEAR_SECONDS=$((10#$normalized))
+}
+
+doctor_command() {
+  local pass_present=false clipboard_present=false
+  local version="" version_output="" message="Dependencies are available"
+
+  if command -v pass-cli >/dev/null 2>&1; then
+    pass_present=true
+    if version_output=$(run_pass_cli "$DOCTOR_TIMEOUT_SECONDS" --version 2>/dev/null) &&
+       [[ $version_output =~ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+      version=${BASH_REMATCH[1]}
+    fi
+  fi
+
+  if command -v wl-copy >/dev/null 2>&1 && command -v wl-paste >/dev/null 2>&1; then
+    clipboard_present=true
+  fi
+
+  if [[ $pass_present == false || $clipboard_present == false ]]; then
+    emit_doctor missing-deps "Required dependencies are missing" \
+      "$pass_present" "$version" "$clipboard_present"
+  elif [[ -z $version ]]; then
+    emit_doctor ok "Could not determine pass-cli version" \
+      "$pass_present" "$version" "$clipboard_present"
+  elif [[ ${version%%.*} != 2 ]]; then
+    emit_doctor ok "Unexpected pass-cli major version; expected 2.x" \
+      "$pass_present" "$version" "$clipboard_present"
+  else
+    emit_doctor ok "$message" "$pass_present" "$version" "$clipboard_present"
+  fi
+}
+
+parse_index_args() {
+  local exclude_vaults="" seen_exclude=false
+
+  while (( $# > 0 )); do
+    case $1 in
+      --exclude-vaults)
+        if [[ $seen_exclude == true || $# -lt 2 ]]; then return 2; fi
+        exclude_vaults=$2
+        seen_exclude=true
+        shift 2
+        ;;
+      *) return 2 ;;
+    esac
+  done
+
+  [[ $seen_exclude == true ]] || return 2
+  INDEX_EXCLUDE_VAULTS=$exclude_vaults
+}
+
+parse_copy_args() {
+  local share_id="" item_id="" field="" clear_seconds=""
+  local seen_share=false seen_item=false seen_field=false seen_clear=false paste_once=false
+
+  while (( $# > 0 )); do
+    case $1 in
+      --share-id)
+        if [[ $seen_share == true || $# -lt 2 ]]; then return 2; fi
+        share_id=$2
+        seen_share=true
+        shift 2
+        ;;
+      --item-id)
+        if [[ $seen_item == true || $# -lt 2 ]]; then return 2; fi
+        item_id=$2
+        seen_item=true
+        shift 2
+        ;;
+      --field)
+        if [[ $seen_field == true || $# -lt 2 ]]; then return 2; fi
+        field=$2
+        seen_field=true
+        shift 2
+        ;;
+      --clear-seconds)
+        if [[ $seen_clear == true || $# -lt 2 ]]; then return 2; fi
+        clear_seconds=$2
+        seen_clear=true
+        shift 2
+        ;;
+      --paste-once)
+        if [[ $paste_once == true ]]; then return 2; fi
+        paste_once=true
+        shift
+        ;;
+      *) return 2 ;;
+    esac
+  done
+
+  [[ $seen_share == true && $seen_item == true && $seen_field == true && $seen_clear == true ]] || return 2
+  valid_id "$share_id" || return 2
+  valid_id "$item_id" || return 2
+  [[ $field == username || $field == password || $field == totp ]] || return 2
+  normalize_clear_seconds "$clear_seconds" || return 2
+  COPY_SHARE_ID=$share_id
+  COPY_ITEM_ID=$item_id
+  COPY_FIELD=$field
+  COPY_CLEAR_SECONDS=$NORMALIZED_CLEAR_SECONDS
+  COPY_PASTE_ONCE=$paste_once
+}
+
+index_command() {
+  : "$INDEX_EXCLUDE_VAULTS"
+  emit_index_stub
+}
+
+copy_command() {
+  : "$COPY_SHARE_ID" "$COPY_ITEM_ID" "$COPY_PASTE_ONCE"
+  emit_copy_stub "$COPY_FIELD" "$COPY_CLEAR_SECONDS"
+}
+
+lock_command() {
+  emit_lock_stub
+}
+
+main() {
+  local command_name
+  if (( $# == 0 )); then
+    emit_dispatch_error
+    return 2
+  fi
+
+  command_name=$1
+  shift
+  case $command_name in
+    doctor)
+      if (( $# != 0 )); then emit_command_error doctor; return 2; fi
+      doctor_command
+      ;;
+    index)
+      if ! parse_index_args "$@"; then emit_command_error index; return 2; fi
+      index_command
+      ;;
+    copy)
+      if ! parse_copy_args "$@"; then emit_command_error copy; return 2; fi
+      copy_command
+      ;;
+    lock)
+      if (( $# != 0 )); then emit_command_error lock; return 2; fi
+      lock_command
+      ;;
+    *)
+      emit_dispatch_error
+      return 2
+      ;;
+  esac
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi

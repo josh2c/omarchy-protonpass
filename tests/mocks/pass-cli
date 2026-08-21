@@ -74,8 +74,16 @@ JSON
 
 record_call "$@"
 
+if [[ ${MOCK_ASSERT_SAFE_ENV:-0} == 1 ]]; then
+  [[ ${PASS_LOG_LEVEL:-} == off && ${MUON_LOG_LEVEL:-} == off ]]
+  [[ ${PROTON_PASS_KEY_PROVIDER:-} == fixture-provider ]]
+  [[ ${PROTON_PASS_SESSION_DIR:-} == /tmp/fixture-session ]]
+  [[ ${PROTON_PASS_PERSONAL_ACCESS_TOKEN:-} == fixture-credential ]]
+  [[ ${PROTON_PASS_DISABLE_TELEMETRY:-} == fixture-telemetry ]]
+fi
+
 if [[ $# -eq 1 && $1 == --version ]]; then
-  printf 'Proton Pass CLI 2.3.2 (mock)\n'
+  printf 'Proton Pass CLI %s (mock)\n' "${MOCK_PASS_CLI_VERSION:-2.3.2}"
   exit 0
 fi
 

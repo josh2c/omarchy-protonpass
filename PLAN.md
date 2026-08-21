@@ -1,6 +1,6 @@
 # omarchy-protonpass — v1 Implementation Plan
 
-Status: **ready to implement** (rev 2.3, **T0 complete** — all fixtures captured) · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
+Status: **ready to implement** (rev 2.4, **T0 complete** — all fixtures captured) · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
 
 All product, architecture, security, and scope decisions are resolved. Facts verified against a live Omarchy 4.x install (`/usr/share/omarchy/shell`, `/usr/bin/omarchy-plugin-validate`), a clone of `robzolkos/omarchy-github`, and the `protonpass/pass-cli` Rust source (v2.3.2, 2026-08). The §2.2 manifest passes `omarchy-plugin-validate` verbatim (tested). `salemsayed/omwarden` does not exist and is not a reference.
 
@@ -12,6 +12,8 @@ resolved the keyboard-focus model; specified the copy-in-flight lifecycle; the c
 **Rev 2.2 (T0 live-capture corrections, all verified against source):** (1) `index` now explicitly unwraps `{"vaults":[…]}` and reads `share_id`/`name` (the plan only spelled out the `.items` unwrap). (2) TOTP retrieval switched to the field-less `item totp` form: with `--field totp`, a TOTP stored under any other field name fails with `Field does not exist: totp` (`totp.rs:195`, confirmed live); the field-less form collects all TOTP fields and fails with the expected "No TOTP fields found in this item". (3) **PLAN_INELIGIBLE state removed** — it is unreachable by construction: the eligibility error surfaces only inside the login terminal (which the helper never observes) and login force-logs-out, so subsequent helper calls see plain logged-out; eligibility guidance moved to the setup view, LOGGED_OUT view, and README. (4) "Paid plan" wording tightened: CLI access requires personal **Pass Plus** (or bundles including it) or business **Pass Professional**; business **Pass Essentials is not eligible**. Also: T0 confirmed real IDs (88 chars) pass the allowlist, field output ends in exactly one newline, the flattened TOTP map, the exact no-lock error, and serial index latency of **1.104 s** — risk R3's parallelization fallback is retired; the serial helper stands.
 
 **Rev 2.3 (T0 completion):** the live revoked-session response is a multi-line anyhow chain ending in `non-existent session` (source: `pass/src/muon_ext.rs:31` — pass-cli's own detection string), which the rev 2.2 patterns missed; the classifier now maps `non-existent session` → `logged-out` with the expired-session message, and §2.7 makes explicit that patterns match anywhere in the **full multi-line stderr capture** (anyhow "Caused by:" chains included). Field-less `item totp` success output can carry both `totp` and `totp_uri` keys (both values are generated codes in this command — `TotpOutput::Code` is forced; but the extraction fallback defensively skips `*_uri`-named keys anyway). Confirmed: the weekly self-update check cannot stall helper calls in v2.3.2 (skipped when stderr is captured/non-terminal). T0 is closed: all fixtures captured, identity-free, at `tests/fixtures/`; the disposable CLI session was revoked afterward.
+
+**Rev 2.4 (T3 contract-gap fix):** the §2.5 `command` enum gains `unknown`, permitted only for dispatcher-level argv errors (empty invocation, unrecognized subcommand) where no truthful command name exists; invalid options for a recognized subcommand keep that command's name. Both are exit 2 + JSON; the Service's handling (exit 2 → ERROR) is unchanged. The T1 stub's practice of labeling such errors `doctor` was misleading and is superseded.
 
 **Corrections to the original brief** (verified, unchanged from rev 1): manifest requires `entryPoints`; `activation` is dead; single-instance is `barWidget.allowMultiple: false`. pass-cli sessions live in a file under `~/.local/share/proton-pass-cli/.session/` encrypted with a kernel-keyring key (defaults we never override). Session lock is enforced **server-side** — listing and retrieval always need network. Item summaries carry no username preview and no TOTP flag, and are non-secret by source-level contract. `item list` is per-vault. pass-cli has no clipboard command. Field retrieval addresses items by `--share-id`/`--item-id`/`--field` (bare value + `\n` on stdout); titles never enter a command line.
 
@@ -146,9 +148,11 @@ Note on CLI field resolution: pass-cli's `--field` match is case-insensitive and
 Common envelope on every response:
 
 ```json
-{ "schemaVersion": 1, "command": "<doctor|index|copy|lock>", "state": "<state>",
+{ "schemaVersion": 1, "command": "<doctor|index|copy|lock|unknown>", "state": "<state>",
   "message": "<sanitized, user-displayable>" }
 ```
+
+`"command": "unknown"` is permitted **only** for dispatcher-level argv errors — an empty invocation or an unrecognized subcommand (exit 2 + `state:"error"`). Invalid options for a *recognized* subcommand keep that subcommand's name (also exit 2 + JSON). The Service treats any exit-2 response as ERROR regardless of `command`, so this distinction exists for debuggability, not control flow.
 
 `doctor` adds `"passCli": {"present": true, "version": "2.3.2"}, "wlClipboard": {"present": true}`; states `ok | missing-deps`.
 
