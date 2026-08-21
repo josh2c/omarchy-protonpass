@@ -21,6 +21,7 @@ Item {
     readonly property bool clipboardCountdownActive: clipboardClearSeconds > 0
         && clipboardSecondsRemaining > 0
     property double lastSuccessfulIndexAt: 0
+    property bool logoutBusy: false
     property bool staleWarning: false
     property bool panelOpen: false
     readonly property var filteredItems: filterItems(items, query)
@@ -47,6 +48,7 @@ Item {
     property string _recentsStdout: ""
     property string _recentsOperation: ""
     property string _pendingRecentsOperation: ""
+    property string _logoutStdout: ""
 
     signal toastRequested(string message)
 
@@ -138,7 +140,8 @@ Item {
             copy: ["copied", "no-field", "cli-missing", "logged-out", "locked", "unreachable", "error"],
             lock: ["locked", "no-lock", "cli-missing", "logged-out", "unreachable", "error"],
             "clear-now": ["cleared", "not-owner", "error"],
-            recents: ["ok", "error"]
+            recents: ["ok", "error"],
+            logout: ["logged-out-ok", "cli-missing", "unreachable", "error"]
         };
         return states[commandName] !== undefined && states[commandName].indexOf(responseState) !== -1;
     }
@@ -340,7 +343,7 @@ Item {
             indexProcess.running = false;
         }
         refreshing = false;
-        // Copy, lock, and recents processes intentionally continue to completion.
+        // Copy, clear-now, lock, recents, and logout processes intentionally continue to completion.
     }
 
     function copy(shareId, itemId, field) {
@@ -420,6 +423,16 @@ Item {
             recents = [];
             runRecents("clear");
         }
+    }
+
+    function logout() {
+        if (logoutProcess.running)
+            return false;
+        _logoutStdout = "";
+        logoutProcess.command = [helperPath(), "logout"];
+        logoutBusy = true;
+        logoutProcess.running = true;
+        return true;
     }
 
     function _copyToast(response) {
@@ -663,6 +676,35 @@ Item {
             id: recentsOutput
             waitForEnd: true
             onStreamFinished: root._recentsStdout = text
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: logoutProcess
+        running: false
+        command: []
+        onExited: function(exitCode) {
+            root.logoutBusy = false;
+            var response = root._validatedResponse(String(logoutOutput.text || root._logoutStdout || ""), "logout");
+            if (exitCode !== 0 || response === null) {
+                root._programError();
+                return;
+            }
+            if (response.state === "logged-out-ok") {
+                root._clearIndex();
+                root.state = "LOGGED_OUT";
+                root.message = response.message;
+            } else if (response.state === "cli-missing") {
+                root._missingDependency(response.message);
+            } else if (root.panelOpen) {
+                root.toastRequested("Could not log out — check connection and try again");
+            }
+        }
+        stdout: StdioCollector {
+            id: logoutOutput
+            waitForEnd: true
+            onStreamFinished: root._logoutStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }

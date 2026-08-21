@@ -19,6 +19,7 @@ Panel {
   property string toastText: ""
   property string setupClipboardText: ""
   property int statusTick: 0
+  property bool logoutArmed: false
 
   readonly property var keybindConfiguration: Keybinds.parse(
     String(svc.setting("keybinds", "")),
@@ -173,6 +174,22 @@ Panel {
     setupCopyProcess.running = true
   }
 
+  function disarmLogout() {
+    logoutArmed = false
+    logoutArmTimer.stop()
+  }
+
+  function requestLogout() {
+    if (svc.logoutBusy) return
+    if (!logoutArmed) {
+      logoutArmed = true
+      logoutArmTimer.restart()
+      return
+    }
+    disarmLogout()
+    svc.logout()
+  }
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -185,6 +202,7 @@ Panel {
       svc.onPanelOpened()
       Qt.callLater(function() { search.forceActiveFocus() })
     } else {
+      disarmLogout()
       toastTimer.stop()
       toastText = ""
       svc.onPanelClosed()
@@ -204,6 +222,7 @@ Panel {
     function onFilteredItemsChanged() { root.ensureCursor() }
     function onDisplayItemsChanged() { root.ensureCursor() }
     function onStateChanged() {
+      root.disarmLogout()
       if (root.opened && svc.state === "READY")
         Qt.callLater(function() { search.forceActiveFocus() })
     }
@@ -221,6 +240,13 @@ Panel {
     repeat: true
     running: root.opened && svc.state === "READY"
     onTriggered: root.statusTick++
+  }
+
+  Timer {
+    id: logoutArmTimer
+    interval: 4000
+    repeat: false
+    onTriggered: root.logoutArmed = false
   }
 
   Process {
@@ -242,6 +268,8 @@ Panel {
     text: "󰌆"
     active: root.needsAttention
     tooltipText: "Proton Pass"
+    Accessible.role: Accessible.Button
+    Accessible.name: "Proton Pass"
     onPressed: root.toggle()
   }
 
@@ -352,6 +380,8 @@ Panel {
             color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
             borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.20), 1)
             radius: Style.cornerRadius
+            Accessible.role: Accessible.AlertMessage
+            Accessible.name: root.toastText
 
             Text {
               id: toastLabel
@@ -372,6 +402,7 @@ Panel {
             visible: svc.state === "READY"
             width: parent.width
             placeholderText: "Search logins and vaults…"
+            Accessible.name: "Search Proton Pass logins"
             foreground: root.foreground
             onTextChanged: {
               svc.query = text
@@ -706,6 +737,8 @@ Panel {
                 anchors.rightMargin: Style.space(8)
                 iconText: ""
                 tooltipText: "Copy official installer command"
+                Accessible.role: Accessible.Button
+                Accessible.name: "Copy official installer command"
                 onClicked: root.copySetupCommand(installerText.text)
               }
             }
@@ -733,6 +766,8 @@ Panel {
                 anchors.rightMargin: Style.space(8)
                 iconText: ""
                 tooltipText: "Copy Arch AUR command"
+                Accessible.role: Accessible.Button
+                Accessible.name: "Copy Arch AUR command"
                 onClicked: root.copySetupCommand(archText.text)
               }
             }
@@ -770,6 +805,8 @@ Panel {
                 anchors.rightMargin: Style.space(8)
                 iconText: ""
                 tooltipText: "Copy wl-clipboard install command"
+                Accessible.role: Accessible.Button
+                Accessible.name: "Copy wl-clipboard install command"
                 onClicked: root.copySetupCommand(clipboardText.text)
               }
             }
@@ -973,13 +1010,31 @@ Panel {
               PanelActionButton {
                 iconText: "󰑐"
                 tooltipText: "Refresh"
+                Accessible.role: Accessible.Button
+                Accessible.name: "Refresh Proton Pass"
                 enabled: !svc.refreshing
                 onClicked: svc.refresh()
               }
               PanelActionButton {
                 iconText: "󰌾"
                 tooltipText: "Lock Proton Pass"
+                Accessible.role: Accessible.Button
+                Accessible.name: "Lock Proton Pass"
                 onClicked: svc.lock()
+              }
+              Button {
+                property real reservedWidth: 0
+                onImplicitWidthChanged: reservedWidth = Math.max(reservedWidth, implicitWidth)
+                width: Math.max(reservedWidth, implicitWidth)
+                text: svc.logoutBusy ? "Logging out…" : (root.logoutArmed ? "Confirm log out" : "Log out")
+                enabled: !svc.logoutBusy
+                foreground: root.logoutArmed ? root.urgent : root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                verticalPadding: Style.spacing.controlPaddingY
+                Accessible.role: Accessible.Button
+                Accessible.name: text
+                onClicked: root.requestLogout()
               }
             }
           }

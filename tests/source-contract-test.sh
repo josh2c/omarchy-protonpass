@@ -43,8 +43,8 @@ assert_contains 'if (responseGeneration !== root._indexGeneration)' \
   "stale index responses are not discarded"
 assert_contains $'if (indexProcess.running) {\n            // Invalidate before SIGTERM so onExited cannot publish stale data.\n            _indexGeneration++;\n            indexProcess.running = false;' \
   "closing the panel does not invalidate and stop an index request"
-assert_contains '// Copy, lock, and recents processes intentionally continue to completion.' \
-  "panel close no longer documents the copy lifecycle boundary"
+assert_contains '// Copy, clear-now, lock, recents, and logout processes intentionally continue to completion.' \
+  "panel close no longer documents the non-cancelled helper lifecycle boundary"
 assert_contains $'// An auth transition is authoritative. Invalidate any older index so\n        // it cannot repopulate metadata after logout, lock, or session expiry.\n        _indexGeneration++;' \
   "auth transitions do not invalidate in-flight index metadata"
 assert_contains $'if (copyBusy\n                || !/^[A-Za-z0-9+/=_-]{1,256}$/.test(share)' \
@@ -77,13 +77,15 @@ assert_contains 'root._hideClipboardCountdown();' \
   "clear-now responses do not hide the countdown"
 assert_contains 'root.lastSuccessfulIndexAt = Date.now();' \
   "the last successful index time is not recorded client-side"
+assert_contains 'logoutProcess.command = [helperPath(), "logout"]' \
+  "logout is not passed as a fixed argv array"
 assert_contains 'waitForEnd: true' \
   "process output collectors are not waiting for complete responses"
-[[ $(grep -c '^    Process {' "$ROOT/Service.qml") -eq 6 ]] || \
+[[ $(grep -c '^    Process {' "$ROOT/Service.qml") -eq 7 ]] || \
   fail "Service.qml no longer has one process per helper command"
-[[ $(grep -c 'waitForEnd: true' "$ROOT/Service.qml") -eq 12 ]] || \
+[[ $(grep -c 'waitForEnd: true' "$ROOT/Service.qml") -eq 14 ]] || \
   fail "every helper stdout/stderr collector must wait for completion"
-[[ $(grep -c 'if (exitCode !== 0 || response === null)' "$ROOT/Service.qml") -eq 5 ]] || \
+[[ $(grep -c 'if (exitCode !== 0 || response === null)' "$ROOT/Service.qml") -eq 6 ]] || \
   fail "exit-code discipline is not enforced for every helper command"
 assert_not_contains 'copyProcess.running = false' \
   "copy processes can be killed before completion"
@@ -199,6 +201,30 @@ assert_panel_contains 'model: svc.recentRows' \
   "the Recent section is not rendered from joined index rows"
 assert_panel_contains 'model: svc.allRows' \
   "the All section is missing its index rows"
+assert_panel_contains $'function requestLogout() {\n    if (svc.logoutBusy) return\n    if (!logoutArmed)' \
+  "logout does not require an idle first click to arm"
+assert_panel_contains $'disarmLogout()\n    svc.logout()' \
+  "logout confirmation does not disarm before invoking the helper"
+assert_panel_contains $'id: logoutArmTimer\n    interval: 4000\n    repeat: false' \
+  "logout confirmation does not disarm after exactly four seconds"
+assert_panel_contains $'function onStateChanged() {\n      root.disarmLogout()' \
+  "logout confirmation is not disarmed on every service state change"
+assert_panel_contains 'root.logoutArmed ? "Confirm log out" : "Log out"' \
+  "logout confirmation is not exposed as text"
+assert_contains $'if (response.state === "logged-out-ok") {\n                root._clearIndex();\n                root.state = "LOGGED_OUT";' \
+  "successful logout does not drop the model and enter LOGGED_OUT"
+[[ $(grep -c 'Accessible.role: Accessible.Button' "$ROOT/Panel.qml") -ge 7 ]] || \
+  fail "icon-only actions do not expose button roles"
+assert_panel_contains 'Accessible.name: "Search Proton Pass logins"' \
+  "the search field has no stable accessible name"
+assert_panel_contains 'Accessible.name: "Lock Proton Pass"' \
+  "the lock icon has no accessible name"
+assert_panel_contains 'Accessible.role: Accessible.AlertMessage' \
+  "copy feedback is not exposed as an accessible alert"
+assert_panel_contains 'Accessible.name: text' \
+  "the logout action does not announce its armed label"
+assert_panel_contains 'text: svc.staleWarning ? "Showing cached list — refresh failed" : "Refreshing…"' \
+  "refresh activity is conveyed only through animation"
 [[ $PANEL_SOURCE != *'--show-secrets'* ]] || fail "Panel.qml enables secret display"
 [[ $PANEL_SOURCE != *'property string password'* ]] || fail "Panel.qml can retain a password"
 
