@@ -146,14 +146,21 @@ calls_before_invalid=$(jq -sc 'length' "$MOCK_CALLS_LOG")
 assert_invalid_helper unknown
 assert_invalid_helper unknown frobnicate
 assert_invalid_helper doctor doctor extra
+assert_invalid_helper doctor doctor --unknown
 assert_invalid_helper index index
 assert_invalid_helper index index --exclude-vaults one --exclude-vaults two
+assert_invalid_helper index index --unknown value
+assert_invalid_helper copy copy --share-id share --item-id item --field password
+assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds -1
+assert_invalid_helper copy copy --share-id share --item-id 'bad item' --field password --clear-seconds 45
 assert_invalid_helper copy copy --share-id 'bad id' --item-id item --field password --clear-seconds 45
 assert_invalid_helper copy copy --share-id share --item-id item --field secret --clear-seconds 45
 assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds 301
 assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds nope
 assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds 45 --paste-once --paste-once
+assert_invalid_helper copy copy --share-id share --item-id item --field password --clear-seconds 45 --unknown
 assert_invalid_helper lock lock extra
+assert_invalid_helper lock lock --unknown
 calls_after_invalid=$(jq -sc 'length' "$MOCK_CALLS_LOG")
 assert_eq "$calls_before_invalid" "$calls_after_invalid" "validation completes before pass-cli execution"
 
@@ -455,5 +462,49 @@ rm "$TEST_BIN/wl-paste"
 missing_wl_paste=$("$HELPER" copy --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 1)
 assert_jq '.state == "error" and (.message|contains("Copy failed"))' "$missing_wl_paste" "timed copy missing wl-paste"
 ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
+
+run_shared_matrix_case() {
+  local command_name=$1 scenario=$2 expected_state=$3
+  local output_file="$TEST_SANDBOX/matrix-$command_name-$scenario.stdout"
+  local stderr_file="$TEST_SANDBOX/matrix-$command_name-$scenario.stderr"
+  local status
+  local -a args
+
+  case "$command_name" in
+    index) args=(index --exclude-vaults '') ;;
+    copy) args=(copy --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0) ;;
+    lock) args=(lock) ;;
+    *) fail "unsupported matrix command: $command_name" ;;
+  esac
+
+  set +e
+  if [[ $scenario == timeout-sleeps ]]; then
+    MOCK_SCENARIO=$scenario MOCK_TIMEOUT_EXIT=1 \
+      "$HELPER" "${args[@]}" >"$output_file" 2>"$stderr_file"
+  else
+    MOCK_SCENARIO=$scenario \
+      "$HELPER" "${args[@]}" >"$output_file" 2>"$stderr_file"
+  fi
+  status=$?
+  set -e
+
+  assert_eq "0" "$status" "$command_name $scenario handled exit status"
+  [[ ! -s $stderr_file ]] || fail "$command_name $scenario wrote stderr"
+  assert_jq ".schemaVersion == 1 and .command == \"$command_name\" and .state == \"$expected_state\"" \
+    "$(<"$output_file")" "$command_name $scenario matrix contract"
+}
+
+for matrix_row in \
+  'ready:ready:copied:locked' \
+  'logged-out:logged-out:logged-out:logged-out' \
+  'expired:logged-out:logged-out:logged-out' \
+  'locked:locked:locked:locked' \
+  'offline:unreachable:unreachable:unreachable' \
+  'timeout-sleeps:unreachable:unreachable:unreachable'; do
+  IFS=: read -r matrix_scenario index_state copy_state lock_state <<<"$matrix_row"
+  run_shared_matrix_case index "$matrix_scenario" "$index_state"
+  run_shared_matrix_case copy "$matrix_scenario" "$copy_state"
+  run_shared_matrix_case lock "$matrix_scenario" "$lock_state"
+done
 
 printf 'helper and mock harness tests passed\n'
