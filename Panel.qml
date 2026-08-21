@@ -20,6 +20,14 @@ Panel {
   property string setupClipboardText: ""
   property int statusTick: 0
   property bool logoutArmed: false
+  property bool createFormOpen: false
+  property string createVaultShareId: ""
+  property string createIdentifierField: "username"
+  property string createdShareId: ""
+  property string createdItemId: ""
+  readonly property bool createControlsEnabled: !svc.copyBusy && !svc.createBusy
+  readonly property bool createFormValid: svc.validCreateInput(
+    createVaultShareId, createTitle.text, createIdentifierField, createIdentifier.text)
 
   readonly property var keybindConfiguration: Keybinds.parse(
     String(svc.setting("keybinds", "")),
@@ -145,6 +153,10 @@ Panel {
   }
 
   function layeredEscape() {
+    if (createFormOpen) {
+      closeCreateForm()
+      search.forceActiveFocus()
+    } else
     if (search.text !== "") {
       search.clear()
       search.forceActiveFocus()
@@ -159,8 +171,39 @@ Panel {
   }
 
   function showToast(message) {
+    createdShareId = ""
+    createdItemId = ""
     toastText = String(message || "")
     if (toastText !== "") toastTimer.restart()
+  }
+
+  function showCreatedToast(shareId, itemId) {
+    createdShareId = String(shareId || "")
+    createdItemId = String(itemId || "")
+    toastText = "Login created"
+    toastTimer.restart()
+  }
+
+  function openCreateForm() {
+    if (svc.vaults.length === 0 || !createControlsEnabled) return
+    createVaultShareId = svc.vaults[0].shareId
+    createIdentifierField = "username"
+    createTitle.clear()
+    createIdentifier.clear()
+    createFormOpen = true
+    Qt.callLater(function() { createTitle.forceActiveFocus() })
+  }
+
+  function closeCreateForm() {
+    createFormOpen = false
+    createTitle.clear()
+    createIdentifier.clear()
+    createVaultShareId = ""
+  }
+
+  function submitCreate() {
+    if (!createFormValid || !createControlsEnabled) return
+    svc.create(createVaultShareId, createTitle.text, createIdentifierField, createIdentifier.text)
   }
 
   function copySetupCommand(commandText) {
@@ -199,8 +242,11 @@ Panel {
       Qt.callLater(function() { search.forceActiveFocus() })
     } else {
       disarmLogout()
+      closeCreateForm()
       toastTimer.stop()
       toastText = ""
+      createdShareId = ""
+      createdItemId = ""
       svc.onPanelClosed()
     }
   }
@@ -215,6 +261,11 @@ Panel {
   Connections {
     target: svc
     function onToastRequested(message) { root.showToast(message) }
+    function onLoginCreated(shareId, itemId) {
+      root.closeCreateForm()
+      root.showCreatedToast(shareId, itemId)
+      Qt.callLater(function() { search.forceActiveFocus() })
+    }
     function onFilteredItemsChanged() { root.ensureCursor() }
     function onDisplayItemsChanged() { root.ensureCursor() }
     function onStateChanged() {
@@ -228,7 +279,11 @@ Panel {
     id: toastTimer
     interval: 3000
     repeat: false
-    onTriggered: root.toastText = ""
+    onTriggered: {
+      root.toastText = ""
+      root.createdShareId = ""
+      root.createdItemId = ""
+    }
   }
 
   Timer {
@@ -282,7 +337,7 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: search.activeFocus
+      blocked: search.activeFocus || createTitle.activeFocus || createIdentifier.activeFocus
 
       // The stock catcher also reserves h/l/x/space. The v1 contract does
       // not: in list mode every printable key except the explicit actions
@@ -372,24 +427,47 @@ Panel {
           BorderSurface {
             visible: root.toastText !== ""
             width: parent.width
-            implicitHeight: toastLabel.implicitHeight + Style.space(18)
+            implicitHeight: toastContent.implicitHeight + Style.space(18)
             color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
             borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.20), 1)
             radius: Style.cornerRadius
             Accessible.role: Accessible.AlertMessage
             Accessible.name: root.toastText
 
-            Text {
-              id: toastLabel
+            Row {
+              id: toastContent
               anchors.centerIn: parent
               width: parent.width - Style.space(20)
-              text: root.toastText
-              textFormat: Text.PlainText
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
+              spacing: Style.space(8)
+
+              Text {
+                id: toastLabel
+                width: Math.max(1, parent.width - (copyCreatedPassword.visible
+                  ? copyCreatedPassword.width + parent.spacing : 0))
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.toastText
+                textFormat: Text.PlainText
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                horizontalAlignment: copyCreatedPassword.visible ? Text.AlignLeft : Text.AlignHCenter
+                wrapMode: Text.WordWrap
+              }
+
+              Button {
+                id: copyCreatedPassword
+                visible: root.createdShareId !== "" && root.createdItemId !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Copy password"
+                enabled: root.createControlsEnabled
+                focusable: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                Accessible.role: Accessible.Button
+                Accessible.name: "Copy password for created login"
+                onClicked: svc.copy(root.createdShareId, root.createdItemId, "password")
+              }
             }
           }
 
@@ -428,6 +506,173 @@ Panel {
                 if (!root.cursorActive) root.moveCursor(1)
                 keyCatcher.forceActiveFocus()
                 event.accepted = true
+              }
+            }
+          }
+
+          BorderSurface {
+            visible: svc.state === "READY" && root.createFormOpen
+            width: parent.width
+            implicitHeight: createForm.implicitHeight + Style.space(20)
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.05)
+            borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.18), 1)
+            radius: Style.cornerRadius
+
+            Column {
+              id: createForm
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.space(10)
+              anchors.rightMargin: Style.space(10)
+              spacing: Style.space(8)
+
+              Text {
+                width: parent.width
+                text: "Create login"
+                textFormat: Text.PlainText
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+              }
+
+              TextField {
+                id: createTitle
+                width: parent.width
+                enabled: root.createControlsEnabled
+                placeholderText: "Title"
+                Accessible.name: "Login title"
+                foreground: root.foreground
+                Keys.onEscapePressed: {
+                  root.closeCreateForm()
+                  search.forceActiveFocus()
+                }
+              }
+
+              Row {
+                width: parent.width
+                spacing: Style.space(6)
+
+                Button {
+                  text: "Username"
+                  enabled: root.createControlsEnabled
+                  focusable: true
+                  foreground: root.createIdentifierField === "username" ? root.foreground : root.dim
+                  Accessible.role: Accessible.Button
+                  Accessible.name: "Use username identifier"
+                  onClicked: root.createIdentifierField = "username"
+                }
+                Button {
+                  text: "Email"
+                  enabled: root.createControlsEnabled
+                  focusable: true
+                  foreground: root.createIdentifierField === "email" ? root.foreground : root.dim
+                  Accessible.role: Accessible.Button
+                  Accessible.name: "Use email identifier"
+                  onClicked: root.createIdentifierField = "email"
+                }
+              }
+
+              TextField {
+                id: createIdentifier
+                width: parent.width
+                enabled: root.createControlsEnabled
+                placeholderText: root.createIdentifierField === "email" ? "Email (optional)" : "Username (optional)"
+                Accessible.name: root.createIdentifierField === "email" ? "Login email" : "Login username"
+                foreground: root.foreground
+                Keys.onEscapePressed: {
+                  root.closeCreateForm()
+                  search.forceActiveFocus()
+                }
+                Keys.onReturnPressed: root.submitCreate()
+                Keys.onEnterPressed: root.submitCreate()
+              }
+
+              Text {
+                width: parent.width
+                text: "Vault"
+                textFormat: Text.PlainText
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+
+              Column {
+                width: parent.width
+                spacing: Style.space(2)
+
+                Repeater {
+                  model: svc.vaults
+
+                  CursorSurface {
+                    id: createVaultOption
+                    required property var modelData
+                    width: parent.width
+                    implicitHeight: createVaultName.implicitHeight + Style.space(12)
+                    activeFocusOnTab: true
+                    current: root.createVaultShareId === modelData.shareId
+                    hasCursor: activeFocus
+                    foreground: root.foreground
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Use vault " + modelData.name
+                    Keys.onReturnPressed: if (root.createControlsEnabled)
+                      root.createVaultShareId = modelData.shareId
+                    Keys.onEnterPressed: if (root.createControlsEnabled)
+                      root.createVaultShareId = modelData.shareId
+                    Keys.onSpacePressed: if (root.createControlsEnabled)
+                      root.createVaultShareId = modelData.shareId
+                    Accessible.onPressAction: if (root.createControlsEnabled)
+                      root.createVaultShareId = modelData.shareId
+
+                    Text {
+                      id: createVaultName
+                      anchors.left: parent.left
+                      anchors.right: parent.right
+                      anchors.verticalCenter: parent.verticalCenter
+                      anchors.leftMargin: Style.space(9)
+                      anchors.rightMargin: Style.space(9)
+                      text: createVaultOption.modelData.name
+                      textFormat: Text.PlainText
+                      color: root.createVaultShareId === createVaultOption.modelData.shareId
+                        ? root.foreground : root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                      elide: Text.ElideRight
+                    }
+
+                    MouseArea {
+                      anchors.fill: parent
+                      enabled: root.createControlsEnabled
+                      cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                      onClicked: root.createVaultShareId = createVaultOption.modelData.shareId
+                    }
+                  }
+                }
+              }
+
+              Row {
+                anchors.right: parent.right
+                spacing: Style.space(6)
+
+                Button {
+                  text: "Cancel"
+                  enabled: root.createControlsEnabled
+                  focusable: true
+                  onClicked: {
+                    root.closeCreateForm()
+                    search.forceActiveFocus()
+                  }
+                }
+                Button {
+                  text: svc.createBusy ? "Creating…" : "Create login"
+                  enabled: root.createControlsEnabled && root.createFormValid
+                  focusable: true
+                  Accessible.role: Accessible.Button
+                  Accessible.name: text
+                  onClicked: root.submitCreate()
+                }
               }
             }
           }
@@ -974,6 +1219,22 @@ Panel {
                 Accessible.name: "Refresh Proton Pass"
                 enabled: !svc.refreshing
                 onClicked: svc.refresh()
+              }
+              PanelActionButton {
+                iconText: ""
+                tooltipText: root.createFormOpen ? "Close create form" : "Create login"
+                Accessible.role: Accessible.Button
+                Accessible.name: tooltipText
+                enabled: root.createControlsEnabled && svc.vaults.length > 0
+                focusable: true
+                onClicked: {
+                  if (root.createFormOpen) {
+                    root.closeCreateForm()
+                    search.forceActiveFocus()
+                  } else {
+                    root.openCreateForm()
+                  }
+                }
               }
               PanelActionButton {
                 iconText: "󰌾"

@@ -37,10 +37,11 @@ emit_ready_vaults() {
 }
 
 emit_multivault_vaults() {
-  jq -cn '{vaults:[
-    {name:"Personal",vault_id:"vault_fixture_1",share_id:"share_fixture_1"},
-    {name:"Work",vault_id:"vault_fixture_2",share_id:"share_fixture_2"}
-  ]}'
+  cat "$FIXTURES/vault-list-multiple.json"
+}
+
+emit_empty_items() {
+  cat "$FIXTURES/item-list-empty.json"
 }
 
 emit_ready_items() {
@@ -106,8 +107,9 @@ fi
 
 if [[ ${1:-} == vault && ${2:-} == list ]]; then
   case "$scenario" in
-    ready-multivault|empty-vault) emit_multivault_vaults ;;
+    ready-multivault|empty-vault|zero-logins) emit_multivault_vaults ;;
     zero-vaults) jq -cn '{vaults:[]}' ;;
+    malformed-vault-entry) jq -cn '{vaults:[{name:"",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
     *) emit_ready_vaults ;;
   esac
   exit 0
@@ -126,11 +128,12 @@ if [[ ${1:-} == item && ${2:-} == list ]]; then
   case "$scenario" in
     ready-multivault) emit_multivault_items "$share_id" ;;
     empty-vault)
-      if [[ $share_id == share_fixture_2 ]]; then jq -cn '{items:[]}'
+      if [[ $share_id == share_fixture_2 ]]; then emit_empty_items
       else emit_ready_items
       fi
       ;;
-    zero-vaults) jq -cn '{items:[]}' ;;
+    zero-logins) emit_empty_items ;;
+    zero-vaults) emit_empty_items ;;
     unicode-titles) emit_unicode_items ;;
     *) emit_ready_items ;;
   esac

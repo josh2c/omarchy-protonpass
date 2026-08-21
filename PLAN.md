@@ -1,6 +1,6 @@
 # omarchy-protonpass — v1 Implementation Plan
 
-Status: v1.0+v1.1 built; v1.2 addendum (rev 4.1) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
+Status: v1.0+v1.1 built; v1.2 addendum (rev 4.2) at end of document · Target: Omarchy Quattro (4.x) · Plugin ID: `josh2c.protonpass` · Repo: `github.com/josh2c/omarchy-protonpass` · License: MIT
 
 All product, architecture, security, and scope decisions are resolved. Facts verified against a live Omarchy 4.x install (`/usr/share/omarchy/shell`, `/usr/bin/omarchy-plugin-validate`), a clone of `robzolkos/omarchy-github`, and the `protonpass/pass-cli` Rust source (v2.3.2, 2026-08). The §2.2 manifest passes `omarchy-plugin-validate` verbatim (tested).
 
@@ -158,7 +158,7 @@ Common envelope on every response:
 
 `doctor` adds `"passCli": {"present": true, "version": "2.3.2"}, "wlClipboard": {"present": true}`; states `ok | missing-deps`.
 
-`index` adds `"items": [ { "itemId": "xyz==", "shareId": "abc==", "vaultName": "Personal", "title": "GitHub" } ]` and `"warnings": []` (index-only; per-vault partial-failure notes); states `ready |` shared. No `vaults` array — nothing consumes it.
+`index` adds `"items": [ { "itemId": "xyz==", "shareId": "abc==", "vaultName": "Personal", "title": "GitHub" } ]`, `"warnings": []` (index-only; per-vault partial-failure notes), and **(rev 4.2)** `"vaults": [ { "shareId": "abc==", "name": "Personal" } ]` — the already-fetched, exclusion-filtered vault list, reinstated because the v1.2 create-form vault picker consumes it (rev 2 dropped it when nothing did; empty vaults and empty accounts must still offer creation targets). `vaults` is always present: populated on `ready` (may be non-empty even when `items` is empty), `[]` on every error state. Service validates each entry (both fields non-empty strings) and retains vaults alongside items; states `ready |` shared.
 
 Shared error states for `index`/`copy`/`lock`: `cli-missing | logged-out | locked | unreachable | error`. (There is deliberately no plan-eligibility state: the eligibility error surfaces only inside the login terminal, and pass-cli force-logs-out on it, so the helper can only ever observe `logged-out` — eligibility guidance lives in the setup/LOGGED_OUT views and README instead.) `logged-out` covers session-expired (the `message` distinguishes "Not signed in" from "Session expired — sign in again"); `unreachable` covers network failure and timeout (`message` distinguishes). The classifier stays fully granular internally — only the state fan-out is merged.
 
@@ -422,7 +422,7 @@ Unchanged: secrets/usernames never in QML; argv/env/log rules; terminal-only aut
 
 ---
 
-# v1.2 Refinements Addendum (rev 4.1)
+# v1.2 Refinements Addendum (rev 4.2)
 
 Field-feedback pass. All v1.0/v1.1 security rules stand; usernames remain hidden (decided — rows stay identifier-free; vault name disambiguates).
 
@@ -445,7 +445,7 @@ Field-feedback pass. All v1.0/v1.1 security rules stand; usernames remain hidden
 - **T20 — Helper `create` + CLI verification** (bash lane): `--get-template` shape captured to fixtures; stdin-JSON validation walls (strict keys, lengths, reject unknown fields); mock scenarios (created, invalid-input, auth states); security tests extend: title/username absent from argv (calls.log), no password material anywhere, template stdin not logged. Also pin the interactive-terminal create behavior (B1.3).
 - **T21 — QML: remove shortcut chrome** (small): tooltips, row labels, footer legend deleted; Accessible.name retained; source-contract greps updated (assert legend absent, Accessible.name present).
 - **T22 — QML: subtitles** (deps none): recents-ts join → "used X ago", fallback "created <date>"; locale-safe formatting; PlainText.
-- **T23 — QML: create form** (deps T20): non-secret fields only; vault picker fed from index vault names; validation mirrors helper walls; generated-flow success → toast + copy-password affordance (custom-password flow cut per rev 4.1); disabled while `copyBusy`/create in flight.
+- **T23 — QML: create form** (deps T20 + the rev 4.2 `vaults[]` reinstatement, implemented as a preliminary helper+Service change in the same branch): non-secret fields only; vault picker fed from the index `vaults[]` array (not derived from login rows — empty vaults must be selectable); validation mirrors helper walls; generated-flow success → toast + copy-password affordance (custom-password flow cut per rev 4.1); disabled while `copyBusy`/create in flight.
 - **T24 — Docs, combined acceptance, release**: README (create flows, chord table as sole shortcut reference); acceptance additions (create-generated round-trip incl. copy of new password, subtitle correctness, no shortcut chrome, chords still fire); **release decision: the pending v1.1 tag is superseded — one combined acceptance covers v1.0+v1.1+v1.2, single signed `1.2.0` tag.**
 
 Order: T20 first (contract), T21/T22 parallel anytime, T23 after T20, T24 last. T19 (in flight) narrows to docs + CI timeouts; its release step moves to T24.

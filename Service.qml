@@ -11,6 +11,7 @@ Item {
     property string state: "INIT"
     property string message: ""
     property var items: []
+    property var vaults: []
     property var warnings: []
     property string query: ""
     property bool refreshing: false
@@ -22,6 +23,7 @@ Item {
         && clipboardSecondsRemaining > 0
     property double lastSuccessfulIndexAt: 0
     property bool logoutBusy: false
+    property bool createBusy: false
     property bool staleWarning: false
     property bool panelOpen: false
     property double subtitleNow: Date.now()
@@ -50,8 +52,11 @@ Item {
     property string _recentsOperation: ""
     property string _pendingRecentsOperation: ""
     property string _logoutStdout: ""
+    property string _createStdout: ""
+    property string _createInput: ""
 
     signal toastRequested(string message)
+    signal loginCreated(string shareId, string itemId)
 
     function setting(name, fallback) {
         var value = settings ? settings[name] : undefined;
@@ -202,7 +207,8 @@ Item {
             lock: ["locked", "no-lock", "cli-missing", "logged-out", "unreachable", "error"],
             "clear-now": ["cleared", "not-owner", "error"],
             recents: ["ok", "error"],
-            logout: ["logged-out-ok", "cli-missing", "unreachable", "error"]
+            logout: ["logged-out-ok", "cli-missing", "unreachable", "error"],
+            create: ["created", "invalid-input", "cli-missing", "logged-out", "locked", "unreachable", "error"]
         };
         return states[commandName] !== undefined && states[commandName].indexOf(responseState) !== -1;
     }
@@ -236,7 +242,7 @@ Item {
                     || typeof data.wlClipboard.present !== "boolean")
                 return null;
         } else if (expectedCommand === "index") {
-            if (!Array.isArray(data.items) || !_isStringArray(data.warnings))
+            if (!Array.isArray(data.items) || !Array.isArray(data.vaults) || !_isStringArray(data.warnings))
                 return null;
             for (var i = 0; i < data.items.length; i++) {
                 var item = data.items[i];
@@ -249,6 +255,15 @@ Item {
                         || !isFinite(Date.parse(item.createTime)))
                     return null;
             }
+            for (var vaultIndex = 0; vaultIndex < data.vaults.length; vaultIndex++) {
+                var vault = data.vaults[vaultIndex];
+                if (!_isObject(vault)
+                        || typeof vault.shareId !== "string"
+                        || vault.shareId === ""
+                        || typeof vault.name !== "string"
+                        || vault.name === "")
+                    return null;
+            }
         } else if (expectedCommand === "copy") {
             if (["username", "password", "totp"].indexOf(data.field) === -1
                     || typeof data.fallbackUsed !== "boolean"
@@ -257,6 +272,12 @@ Item {
                     || Math.floor(data.clearSeconds) !== data.clearSeconds
                     || data.clearSeconds < 0
                     || data.clearSeconds > 300)
+                return null;
+        } else if (expectedCommand === "create" && data.state === "created") {
+            if (typeof data.itemId !== "string"
+                    || typeof data.shareId !== "string"
+                    || !/^[A-Za-z0-9+/=_-]{1,256}$/.test(data.itemId)
+                    || !/^[A-Za-z0-9+/=_-]{1,256}$/.test(data.shareId))
                 return null;
         } else if (expectedCommand === "recents" && data.recents !== undefined) {
             if (!Array.isArray(data.recents) || data.recents.length > 8)
@@ -295,6 +316,7 @@ Item {
         if (indexProcess.running)
             indexProcess.running = false;
         items = [];
+        vaults = [];
         recents = [];
         warnings = [];
         _hasIndex = false;
@@ -407,7 +429,7 @@ Item {
             indexProcess.running = false;
         }
         refreshing = false;
-        // Copy, clear-now, lock, recents, and logout processes intentionally continue to completion.
+        // Copy, create, clear-now, lock, recents, and logout processes intentionally continue to completion.
     }
 
     function copy(shareId, itemId, field) {
@@ -429,6 +451,47 @@ Item {
         copyProcess.command = commandLine;
         copyBusy = true;
         copyProcess.running = true;
+        return true;
+    }
+
+    function _unicodeLength(value) {
+        var text = String(value);
+        var count = 0;
+        for (var i = 0; i < text.length; i++) {
+            var code = text.charCodeAt(i);
+            if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length) {
+                var next = text.charCodeAt(i + 1);
+                if (next >= 0xDC00 && next <= 0xDFFF)
+                    i++;
+            }
+            count++;
+        }
+        return count;
+    }
+
+    function validCreateInput(shareId, title, identifierField, identifier) {
+        return /^[A-Za-z0-9+/=_-]{1,256}$/.test(String(shareId || ""))
+            && typeof title === "string"
+            && _unicodeLength(title) > 0
+            && _unicodeLength(title) <= 500
+            && ["username", "email"].indexOf(identifierField) !== -1
+            && typeof identifier === "string"
+            && _unicodeLength(identifier) <= 500;
+    }
+
+    function create(shareId, title, identifierField, identifier) {
+        var share = String(shareId || "");
+        if (state !== "READY" || copyBusy || createBusy
+                || !validCreateInput(share, title, identifierField, identifier))
+            return false;
+
+        var body = { title: title };
+        body[identifierField] = identifier;
+        _createInput = JSON.stringify(body);
+        _createStdout = "";
+        createProcess.command = [helperPath(), "create", "--share-id", share];
+        createBusy = true;
+        createProcess.running = true;
         return true;
     }
 
@@ -591,6 +654,7 @@ Item {
                 root._programError();
             } else if (response.state === "ready") {
                 var cleanItems = [];
+                var cleanVaults = [];
                 for (var i = 0; i < response.items.length; i++) {
                     cleanItems.push({
                         itemId: response.items[i].itemId,
@@ -600,7 +664,14 @@ Item {
                         createTime: response.items[i].createTime
                     });
                 }
+                for (var vaultIndex = 0; vaultIndex < response.vaults.length; vaultIndex++) {
+                    cleanVaults.push({
+                        shareId: response.vaults[vaultIndex].shareId,
+                        name: response.vaults[vaultIndex].name
+                    });
+                }
                 root.items = cleanItems;
+                root.vaults = cleanVaults;
                 root.warnings = response.warnings.slice();
                 root._hasIndex = true;
                 root.lastSuccessfulIndexAt = Date.now();
@@ -658,6 +729,50 @@ Item {
             id: copyOutput
             waitForEnd: true
             onStreamFinished: root._copyStdout = text
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: createProcess
+        running: false
+        command: []
+        stdinEnabled: true
+        onStarted: {
+            write(root._createInput);
+            root._createInput = "";
+        }
+        onExited: function(exitCode) {
+            root.createBusy = false;
+            root._createInput = "";
+            var response = root._validatedResponse(String(createOutput.text || root._createStdout || ""), "create");
+            if (exitCode !== 0 || response === null) {
+                root._programError();
+                if (root.panelOpen)
+                    root.toastRequested("Could not create login");
+                return;
+            }
+            if (root._authTransition(response.state, response.message))
+                return;
+            if (response.state === "cli-missing") {
+                root._missingDependency(response.message);
+                return;
+            }
+            if (response.state === "created") {
+                if (root.panelOpen) {
+                    root.loginCreated(response.shareId, response.itemId);
+                    root.refresh();
+                }
+            } else if (root.panelOpen) {
+                root.toastRequested(response.state === "invalid-input"
+                    ? "Check the login details and try again"
+                    : "Could not create login");
+            }
+        }
+        stdout: StdioCollector {
+            id: createOutput
+            waitForEnd: true
+            onStreamFinished: root._createStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }

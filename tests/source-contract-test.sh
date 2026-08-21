@@ -39,13 +39,21 @@ assert_contains 'title: response.items[i].title' \
   "the retained model does not include title"
 assert_contains 'createTime: response.items[i].createTime' \
   "the retained model does not include createTime"
+assert_contains 'property var vaults: []' \
+  "the Service does not retain the frozen vault picker model"
+assert_contains 'root.vaults = cleanVaults;' \
+  "successful indexes do not retain validated vaults"
+assert_contains 'typeof vault.shareId !== "string"' \
+  "index vault share IDs are not validated"
+assert_contains 'typeof vault.name !== "string"' \
+  "index vault names are not validated"
 assert_contains 'property int _indexGeneration: 0' \
   "index generations are not tracked"
 assert_contains 'if (responseGeneration !== root._indexGeneration)' \
   "stale index responses are not discarded"
 assert_contains $'if (indexProcess.running) {\n            // Invalidate before SIGTERM so onExited cannot publish stale data.\n            _indexGeneration++;\n            indexProcess.running = false;' \
   "closing the panel does not invalidate and stop an index request"
-assert_contains '// Copy, clear-now, lock, recents, and logout processes intentionally continue to completion.' \
+assert_contains '// Copy, create, clear-now, lock, recents, and logout processes intentionally continue to completion.' \
   "panel close no longer documents the non-cancelled helper lifecycle boundary"
 assert_contains $'// An auth transition is authoritative. Invalidate any older index so\n        // it cannot repopulate metadata after logout, lock, or session expiry.\n        _indexGeneration++;' \
   "auth transitions do not invalidate in-flight index metadata"
@@ -81,13 +89,25 @@ assert_contains 'root.lastSuccessfulIndexAt = Date.now();' \
   "the last successful index time is not recorded client-side"
 assert_contains 'logoutProcess.command = [helperPath(), "logout"]' \
   "logout is not passed as a fixed argv array"
+assert_contains 'createProcess.command = [helperPath(), "create", "--share-id", share]' \
+  "create is not passed as a metadata-free fixed argv array"
+assert_contains 'body[identifierField] = identifier;' \
+  "create does not build its non-secret stdin template"
+assert_contains 'write(root._createInput);' \
+  "create input is not sent over stdin"
+assert_contains 'root._createInput = "";' \
+  "create input is not cleared after use"
+assert_contains 'function validCreateInput(shareId, title, identifierField, identifier)' \
+  "QML create validation does not mirror the helper wall"
+assert_not_contains 'createProcess.command = [helperPath(), "create", "--share-id", share, title' \
+  "create metadata can enter argv"
 assert_contains 'waitForEnd: true' \
   "process output collectors are not waiting for complete responses"
-[[ $(grep -c '^    Process {' "$ROOT/Service.qml") -eq 7 ]] || \
+[[ $(grep -c '^    Process {' "$ROOT/Service.qml") -eq 8 ]] || \
   fail "Service.qml no longer has one process per helper command"
-[[ $(grep -c 'waitForEnd: true' "$ROOT/Service.qml") -eq 14 ]] || \
+[[ $(grep -c 'waitForEnd: true' "$ROOT/Service.qml") -eq 16 ]] || \
   fail "every helper stdout/stderr collector must wait for completion"
-[[ $(grep -c 'if (exitCode !== 0 || response === null)' "$ROOT/Service.qml") -eq 6 ]] || \
+[[ $(grep -c 'if (exitCode !== 0 || response === null)' "$ROOT/Service.qml") -eq 7 ]] || \
   fail "exit-code discipline is not enforced for every helper command"
 assert_not_contains 'copyProcess.running = false' \
   "copy processes can be killed before completion"
@@ -206,6 +226,32 @@ assert_panel_contains 'active: root.needsAttention' \
   "the bar icon does not map user-action states to urgent tint"
 assert_panel_contains 'stdinEnabled: true' \
   "setup commands are not copied over stdin"
+assert_panel_contains 'model: svc.vaults' \
+  "the create form picker is not built from the validated vault model"
+assert_panel_contains 'text: createVaultOption.modelData.name' \
+  "the create form does not render vault names"
+assert_panel_contains $'text: createVaultOption.modelData.name\n                      textFormat: Text.PlainText' \
+  "create-form vault names are not forced to plain text"
+assert_panel_contains 'activeFocusOnTab: true' \
+  "vault choices are not keyboard focusable"
+assert_panel_contains 'current: root.createVaultShareId === modelData.shareId' \
+  "the selected creation vault is not visibly identified"
+assert_panel_contains 'Keys.onReturnPressed: if (root.createControlsEnabled)' \
+  "vault choices cannot be selected from the keyboard"
+assert_panel_contains 'svc.validCreateInput(' \
+  "the create form does not share the Service validation wall"
+assert_panel_contains 'svc.create(createVaultShareId, createTitle.text, createIdentifierField, createIdentifier.text)' \
+  "the create form does not submit only its non-secret fields"
+assert_panel_contains 'enabled: root.createControlsEnabled && root.createFormValid' \
+  "invalid or busy create forms are not disabled"
+assert_panel_contains 'visible: root.createdShareId !== "" && root.createdItemId !== ""' \
+  "successful creation does not expose a copy-password affordance"
+assert_panel_contains 'svc.copy(root.createdShareId, root.createdItemId, "password")' \
+  "the created-login affordance does not use the opaque copy seam"
+assert_panel_not_contains 'Use my own password' \
+  "the removed custom-password flow is exposed in the panel"
+assert_panel_not_contains 'custom password' \
+  "the removed custom-password flow is exposed in the panel"
 jq -e '
   .barWidget.defaults.keybinds == "" and
   ([.barWidget.schema[] | select(.key == "keybinds" and .type == "string" and .defaultValue == "")] | length) == 1

@@ -199,7 +199,7 @@ assert_invalid_helper copy copy --share-id '$(touch /tmp/helper-never-run)' --it
 [[ ! -e /tmp/helper-never-run ]] || fail "invalid helper argument was executed"
 
 index_ready=$(MOCK_SCENARIO=ready "$HELPER" index --exclude-vaults '')
-assert_jq '.schemaVersion == 1 and .command == "index" and .state == "ready" and (.message|type) == "string" and .items == [{itemId:"item_fixture_1",shareId:"share_fixture_1",vaultName:"Personal",title:"T0 Synthetic Login",createTime:"2026-08-20T22:44:15"}] and .warnings == []' "$index_ready" "index ready contract"
+assert_jq '.schemaVersion == 1 and .command == "index" and .state == "ready" and (.message|type) == "string" and .items == [{itemId:"item_fixture_1",shareId:"share_fixture_1",vaultName:"Personal",title:"T0 Synthetic Login",createTime:"2026-08-20T22:44:15"}] and .warnings == [] and .vaults == [{shareId:"share_fixture_1",name:"Personal"}]' "$index_ready" "index ready contract"
 
 assert_invalid_create_input() {
   local body=$1 label=$2 output status
@@ -360,25 +360,30 @@ assert_eq "124" "$runner_timeout_status" "pass-cli timeout wrapper"
 
 : >"$MOCK_CALLS_LOG"
 multivault_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults '')
-assert_jq '.state == "ready" and (.items|length) == 2 and ([.items[].vaultName]|sort) == ["Personal","Work"] and ([.items[].title]|unique) == ["T0 Synthetic Login"] and .warnings == []' "$multivault_index" "index multi-vault merge with duplicate titles"
+assert_jq '.state == "ready" and (.items|length) == 2 and ([.items[].vaultName]|sort) == ["Personal","Work"] and ([.items[].title]|unique) == ["T0 Synthetic Login"] and .warnings == [] and .vaults == [{shareId:"share_fixture_1",name:"Personal"},{shareId:"share_fixture_2",name:"Work"}]' "$multivault_index" "index multi-vault merge with duplicate titles"
 multivault_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
 assert_jq 'length == 3 and .[0] == ["vault","list","--output","json"] and (.[1:]|all(.[0] == "item" and .[1] == "list" and .[4:] == ["--filter-type","login","--filter-state","active","--output","json"]))' "$multivault_calls" "index pass-cli argv"
 
 : >"$MOCK_CALLS_LOG"
 excluded_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults '  Work , Missing  ')
-assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == []' "$excluded_index" "trim-aware vault exclusion"
+assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == [] and .vaults == [{shareId:"share_fixture_1",name:"Personal"}]' "$excluded_index" "trim-aware vault exclusion"
 excluded_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
 assert_jq 'length == 2 and all(.[]; (join(" ")|contains("Work")|not) and (join(" ")|contains("Personal")|not)) and .[1][3] == "share_fixture_1"' "$excluded_calls" "vault names absent from argv"
 
 case_sensitive_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults 'work')
 assert_jq '(.items|length) == 2' "$case_sensitive_index" "vault exclusion is case-sensitive"
 all_excluded_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults ' Personal, Work ')
-assert_jq '.state == "ready" and .items == [] and .warnings == []' "$all_excluded_index" "all vaults excluded"
+assert_jq '.state == "ready" and .items == [] and .warnings == [] and .vaults == []' "$all_excluded_index" "all vaults excluded"
 
 empty_vault_index=$(MOCK_SCENARIO=empty-vault "$HELPER" index --exclude-vaults '')
-assert_jq '.state == "ready" and (.items|length) == 1 and .warnings == []' "$empty_vault_index" "empty vault index"
+assert_jq '.state == "ready" and (.items|length) == 1 and .warnings == [] and (.vaults|length) == 2 and any(.vaults[]; .shareId == "share_fixture_2" and .name == "Work")' "$empty_vault_index" "empty vault index"
+zero_login_index=$(MOCK_SCENARIO=zero-logins "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and .items == [] and .warnings == [] and .vaults == [{shareId:"share_fixture_1",name:"Personal"},{shareId:"share_fixture_2",name:"Work"}]' "$zero_login_index" "zero-login index retains creation vaults"
 zero_vault_index=$(MOCK_SCENARIO=zero-vaults "$HELPER" index --exclude-vaults '')
-assert_jq '.state == "ready" and .items == [] and .warnings == []' "$zero_vault_index" "zero vault index"
+assert_jq '.state == "ready" and .items == [] and .warnings == [] and .vaults == []' "$zero_vault_index" "zero vault index"
+malformed_vault_entry_index=$(MOCK_SCENARIO=malformed-vault-entry "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "error" and .items == [] and .warnings == [] and .vaults == []' \
+  "$malformed_vault_entry_index" "empty vault names do not enter the contract"
 
 : >"$MOCK_CALLS_LOG"
 unicode_index=$(MOCK_SCENARIO=unicode-titles "$HELPER" index --exclude-vaults '')
@@ -391,14 +396,14 @@ assert_jq 'all(.[]; (join(" ")|contains("Quote \"login\"")|not) and (join(" ")|c
 
 : >"$MOCK_CALLS_LOG"
 partial_index=$(MOCK_SCENARIO=ready-multivault MOCK_FAIL_SHARE_ID=share_fixture_2 "$HELPER" index --exclude-vaults '')
-assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == ["A vault could not be loaded"] and (.message|contains("Some vaults"))' "$partial_index" "index partial failure"
+assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == ["A vault could not be loaded"] and (.vaults|length) == 2 and (.message|contains("Some vaults"))' "$partial_index" "index partial failure"
 partial_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
 assert_jq 'length == 3 and any(.[]; index("share_fixture_2"))' "$partial_calls" "index continues through per-vault failure"
 
 malformed_vault_index=$(MOCK_SCENARIO=malformed-json "$HELPER" index --exclude-vaults '')
-assert_jq '.state == "error" and .items == [] and .warnings == [] and (.message|contains("pass-cli"))' "$malformed_vault_index" "malformed vault JSON"
+assert_jq '.state == "error" and .items == [] and .warnings == [] and .vaults == [] and (.message|contains("pass-cli"))' "$malformed_vault_index" "malformed vault JSON"
 malformed_item_index=$(MOCK_SCENARIO=ready-multivault MOCK_MALFORMED_SHARE_ID=share_fixture_2 "$HELPER" index --exclude-vaults '')
-assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and (.warnings|length) == 1' "$malformed_item_index" "malformed per-vault JSON"
+assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and (.warnings|length) == 1 and (.vaults|length) == 2' "$malformed_item_index" "malformed per-vault JSON"
 
 for scenario_state in 'logged-out:logged-out' 'expired:logged-out' 'locked:locked' 'offline:unreachable' 'timeout-sleeps:unreachable'; do
   scenario=${scenario_state%%:*}
@@ -408,7 +413,7 @@ for scenario_state in 'logged-out:logged-out' 'expired:logged-out' 'locked:locke
   else
     classified_index=$(MOCK_SCENARIO=$scenario "$HELPER" index --exclude-vaults '')
   fi
-  assert_jq ".state == \"$expected_state\" and .items == [] and .warnings == [] and (.message|type) == \"string\"" "$classified_index" "index state for $scenario"
+  assert_jq ".state == \"$expected_state\" and .items == [] and .warnings == [] and .vaults == [] and (.message|type) == \"string\"" "$classified_index" "index state for $scenario"
 done
 
 expired_index=$(MOCK_SCENARIO=expired "$HELPER" index --exclude-vaults '')

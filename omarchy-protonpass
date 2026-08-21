@@ -50,19 +50,21 @@ emit_doctor() {
 }
 
 emit_index() {
-  local state=$1 message=$2 items=$3 warnings=$4
+  local state=$1 message=$2 items=$3 warnings=$4 vaults=$5
   jq -cn \
     --arg state "$state" \
     --arg message "$message" \
     --argjson items "$items" \
     --argjson warnings "$warnings" \
+    --argjson vaults "$vaults" \
     '{
       schemaVersion: 1,
       command: "index",
       state: $state,
       message: $message,
       items: $items,
-      warnings: $warnings
+      warnings: $warnings,
+      vaults: $vaults
     }'
 }
 
@@ -643,12 +645,12 @@ clear_recents_data() {
 }
 
 index_command() {
-  local vault_stdout="" vault_stderr="" vaults="[]" items="[]" warnings="[]"
+  local vault_stdout="" vault_stderr="" vaults="[]" contract_vaults="[]" items="[]" warnings="[]"
   local vault_status=0 vault_json share_id item_stdout item_stderr item_status mapped
 
   if ! command -v pass-cli >/dev/null 2>&1; then
     classify_failure index 127 ""
-    emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]'
+    emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]' '[]'
     return 0
   fi
 
@@ -656,7 +658,7 @@ index_command() {
     "$INDEX_TIMEOUT_SECONDS" vault list --output json
   if (( vault_status != 0 )); then
     classify_failure index "$vault_status" "$vault_stderr"
-    emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]'
+    emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]' '[]'
     return 0
   fi
 
@@ -664,12 +666,12 @@ index_command() {
       type == "object" and
       (.vaults | type) == "array" and
       all(.vaults[];
-        (.name | type) == "string" and
+        (.name | type == "string" and length > 0) and
         (.share_id | type) == "string" and
         (.share_id | test("^[A-Za-z0-9+/=_-]{1,256}$"))
       )
     ' <<<"$vault_stdout" >/dev/null 2>&1; then
-    emit_index error "Something went wrong talking to pass-cli" '[]' '[]'
+    emit_index error "Something went wrong talking to pass-cli" '[]' '[]' '[]'
     return 0
   fi
 
@@ -678,6 +680,7 @@ index_command() {
     ($excluded | split(",") | map(trim) | map(select(length > 0))) as $excludedNames
     | [.vaults[] | select(.name as $name | ($excludedNames | index($name) | not))]
   ' <<<"$vault_stdout")
+  contract_vaults=$(jq -c '[.[] | {shareId: .share_id, name: .name}]' <<<"$vaults")
 
   while IFS= read -r vault_json; do
     share_id=$(jq -r '.share_id' <<<"$vault_json")
@@ -719,9 +722,9 @@ index_command() {
   done < <(jq -c '.[]' <<<"$vaults")
 
   if [[ $warnings == '[]' ]]; then
-    emit_index ready "Login items ready" "$items" "$warnings"
+    emit_index ready "Login items ready" "$items" "$warnings" "$contract_vaults"
   else
-    emit_index ready "Some vaults could not be loaded" "$items" "$warnings"
+    emit_index ready "Some vaults could not be loaded" "$items" "$warnings" "$contract_vaults"
   fi
 }
 
