@@ -96,7 +96,7 @@ assert_file_contains "$TEST_SANDBOX/partial.stderr" "Synthetic per-vault failure
 
 printf 'clipboard-marker' | "$TEST_BIN/wl-copy" --sensitive -o
 assert_jq '(.args == ["--sensitive","-o"]) and (.sha256|type == "string")' "$(tail -n1 "$MOCK_WL_COPY_LOG")" "wl-copy argv and hash log"
-if rg -F --quiet 'clipboard-marker' "$MOCK_WL_COPY_LOG"; then fail "wl-copy log contains clipboard content"; fi
+if grep -Fq -- 'clipboard-marker' "$MOCK_WL_COPY_LOG"; then fail "wl-copy log contains clipboard content"; fi
 
 paste_value=$(MOCK_WL_PASTE_VALUE='configured paste value' "$TEST_BIN/wl-paste" --no-newline)
 assert_eq "configured paste value" "$paste_value" "wl-paste configured value"

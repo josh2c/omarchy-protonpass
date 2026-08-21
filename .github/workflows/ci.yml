@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Offline test suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # The hosted Ubuntu image guarantees these stock tools. Tests use GNU
+      # grep rather than the image's unlisted ripgrep binary so CI never needs
+      # a network-backed install. Test execution is account-free and runs with
+      # networking disabled below.
+      - name: Verify test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for command in bash cmp find grep jq sha256sum shellcheck timeout unshare; do
+            command -v "$command" >/dev/null || {
+              printf 'Required runner tool is missing: %s\n' "$command" >&2
+              exit 1
+            }
+          done
+
+      - name: Check Bash syntax offline
+        shell: bash
+        run: |
+          sudo unshare --net -- \
+            bash -n omarchy-protonpass tests/*.sh tests/mocks/*
+
+      - name: Run ShellCheck offline
+        shell: bash
+        run: |
+          sudo unshare --net -- \
+            shellcheck omarchy-protonpass tests/*.sh tests/mocks/*
+
+      - name: Test manifest structure offline
+        shell: bash
+        run: sudo unshare --net -- tests/manifest-test.sh
+
+      - name: Test helper behavior offline
+        shell: bash
+        run: sudo unshare --net -- tests/helper-test.sh
+
+      - name: Test security invariants offline
+        shell: bash
+        run: sudo unshare --net -- tests/security-test.sh
+
+      - name: Test QML source contracts offline
+        shell: bash
+        run: sudo unshare --net -- tests/source-contract-test.sh
+
+      # Mutation check: the security suite itself is part of the security
+      # boundary. This step must fail after a secret-retaining QML property is
+      # seeded; the following step turns an unexpected pass into a CI failure.
+      - name: Seeded security violation is rejected
+        id: seeded_security_violation
+        continue-on-error: true
+        shell: bash
+        run: |
+          printf '\nproperty string password: ""\n' >> Service.qml
+          sudo unshare --net -- tests/security-test.sh
+
+      - name: Assert seeded violation failed
+        if: always()
+        shell: bash
+        env:
+          SEEDED_OUTCOME: ${{ steps.seeded_security_violation.outcome }}
+        run: |
+          if [[ $SEEDED_OUTCOME != failure ]]; then
+            printf 'Security suite accepted the seeded QML violation\n' >&2
+            exit 1
+          fi
+          printf 'Security suite rejected the seeded QML violation\n'

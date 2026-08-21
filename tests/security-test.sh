@@ -16,7 +16,7 @@ done < <(find "$ROOT" -maxdepth 1 -type f -name '*.qml' -print)
 
 fail_on_match() {
   local expression=$1 message=$2
-  if rg -n --regexp "$expression" -- "${security_sources[@]}" >/dev/null; then
+  if grep -En -- "$expression" "${security_sources[@]}" >/dev/null; then
     fail "$message"
   fi
 }
@@ -30,10 +30,10 @@ fail_on_match 'export[[:space:]]+(-[A-Za-z]+[[:space:]]+)*val([[:space:]=]|$)' \
 fail_on_match 'property[[:space:]]+(string|var)[[:space:]]+_?(secret|password|username|totp)(value|text|code|data)?[[:space:]:]' \
   "QML declares a property that could retain a secret"
 
-if rg -n -F -- '--show-secrets' "${security_sources[@]}" >/dev/null; then
+if grep -Fn -- '--show-secrets' "${security_sources[@]}" >/dev/null; then
   fail "runtime source enables pass-cli secret display"
 fi
-if rg -n -F -- '`' "${security_sources[@]}" >/dev/null; then
+if grep -Fn -- '`' "${security_sources[@]}" >/dev/null; then
   fail "runtime source contains backtick interpolation"
 fi
 
