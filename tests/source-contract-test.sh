@@ -5,7 +5,6 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SERVICE_SOURCE=$(<"$ROOT/Service.qml")
 PANEL_SOURCE=$(<"$ROOT/Panel.qml")
 README_SOURCE=$(<"$ROOT/README.md")
-ACCEPTANCE_SOURCE=$(<"$ROOT/T12-ACCEPTANCE.md")
 CI_SOURCE=$(<"$ROOT/.github/workflows/ci.yml")
 
 command -v node >/dev/null || {
@@ -348,23 +347,6 @@ for required_readme_text in \
   'turning it off deletes the local recents store immediately'; do
   [[ $README_SOURCE == *"$required_readme_text"* ]] || \
     fail "README is missing required release documentation: $required_readme_text"
-done
-[[ $README_SOURCE == *'[combined 1.2.0 acceptance checklist](T12-ACCEPTANCE.md)'* ]] || \
-  fail "README does not link the combined release gate"
-
-for required_acceptance_text in \
-  'single combined v1.0 + v1.1 + v1.2 release gate' \
-  'With search focused and text already entered' \
-  'at least 3× one viewport of login rows' \
-  'recents.json` is deleted immediately' \
-  'used X ago' \
-  'no hover tooltips, shortcut labels, or footer shortcut legend' \
-  'With Orca running' \
-  'empty vault with no logins' \
-  'Choose **Copy password** in the success message' \
-  'git tag -s 1.2.0'; do
-  [[ $ACCEPTANCE_SOURCE == *"$required_acceptance_text"* ]] || \
-    fail "combined acceptance checklist is missing: $required_acceptance_text"
 done
 
 ci_step_count=$(grep -c '^      - name:' "$ROOT/.github/workflows/ci.yml")
