@@ -16,21 +16,22 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   property bool cursorActive: false
   property int cursorIndex: 0
-  property string toastText: ""
+  // The whole toast lifecycle in one object, reset only through clearToast():
+  // text is the message, pending marks a "Copying…"/"Creating…" message the
+  // result is expected to replace, and the created* pair names the login a
+  // "Login created" toast offers a password copy for.
+  property var toast: root.emptyToast()
   // Key of the control whose copy is in flight ("<field>@<itemId>"), so the
-  // clicked icon can show its own busy state while copyBusy stays global.
+  // clicked icon can show its own busy state while copyBusy stays global. Kept
+  // out of the toast object: it is busy state, cleared on its own when a copy
+  // ends without a result toast.
   property string copyPendingKey: ""
-  // True while the toast holds a pending message ("Copying…"/"Creating…")
-  // that the result toast is expected to replace.
-  property bool toastPending: false
   property string setupClipboardText: ""
   property int statusTick: 0
   property bool logoutArmed: false
   property bool createFormOpen: false
   property string createVaultShareId: ""
   property string createIdentifierField: "username"
-  property string createdShareId: ""
-  property string createdItemId: ""
   readonly property bool createControlsEnabled: !svc.copyBusy && !svc.createBusy
   readonly property bool createFormValid: svc.validCreateInput(
     createVaultShareId, createTitle.text, createIdentifierField, createIdentifier.text)
@@ -39,6 +40,101 @@ Panel {
     String(svc.setting("keybinds", "")),
     function(entry) { console.warn("omarchy-protonpass: invalid keybind entry: " + entry) })
   readonly property var effectiveKeybinds: keybindConfiguration.bindings
+
+  // Row-level copy actions. Both accessible names are part of the busy-feedback
+  // contract: every icon names its idle state and its in-flight state.
+  readonly property var copyActionSpecs: [
+    {icon: "", field: "username", name: "Copy username", busyName: "Copying username…"},
+    {icon: "", field: "password", name: "Copy password", busyName: "Copying password…"},
+    {icon: "", field: "totp", name: "Copy TOTP code", busyName: "Copying TOTP code…"}
+  ]
+
+  // Header actions. Labels and enablement are resolved per frame by the
+  // functions below rather than stored here, so the model stays constant and
+  // the buttons are never rebuilt mid-interaction.
+  readonly property var headerActionSpecs: [
+    {icon: "󰑐", action: "refresh", tooltip: "Refresh", name: "Refresh Proton Pass"},
+    {icon: "", action: "create", focusable: true},
+    {icon: "󰌾", action: "lock", tooltip: "Lock Proton Pass", name: "Lock Proton Pass"}
+  ]
+
+  function headerActionLabel(spec) {
+    if (spec.action === "create")
+      return createFormOpen ? "Close create form" : "Create login"
+    return spec.name
+  }
+
+  function headerActionEnabled(spec) {
+    if (spec.action === "refresh") return !svc.refreshing
+    if (spec.action === "create") return createControlsEnabled && svc.vaults.length > 0
+    return true
+  }
+
+  function runHeaderAction(spec) {
+    if (spec.action === "refresh") { svc.refresh(); return }
+    if (spec.action === "lock") { svc.lock(); return }
+    if (createFormOpen) {
+      closeCreateForm()
+      search.forceActiveFocus()
+    } else {
+      openCreateForm()
+    }
+  }
+
+  // Every non-READY panel state as data. Blocks render in order through the one
+  // Column below: a line of text in one of two tones, a copyable install
+  // command, or a row of buttons. A new state is a row here, not a new Column.
+  readonly property var stateViews: [
+    {states: ["INIT", "LOADING"], spacing: Style.space(8), blocks: [
+      {dim: svc.state === "LOADING" ? "Loading Proton Pass logins…" : "Checking Proton Pass CLI…",
+       size: Style.font.body, wrap: Text.NoWrap,
+       topPad: Style.space(32), bottomPad: Style.space(32)}
+    ]},
+    {states: ["MISSING_DEPS"], spacing: Style.space(10), blocks: [
+      {urgent: "Proton Pass CLI not found or wl-clipboard is unavailable", bold: true},
+      {urgent: svc.message},
+      {dim: "Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible."},
+      {command: "curl -fsSL https://proton.me/download/pass-cli/install.sh | bash",
+       name: "Copy official installer command", wrap: Text.WrapAnywhere},
+      {command: "yay -S proton-pass-cli-bin", name: "Copy Arch AUR command"},
+      {dim: "Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin.",
+       size: Style.font.caption, align: Text.AlignLeft},
+      {command: "sudo pacman -S wl-clipboard", name: "Copy wl-clipboard install command"},
+      {buttons: [{text: "Recheck", action: "recheck"}]}
+    ]},
+    {states: ["LOGGED_OUT"], spacing: Style.space(10), blocks: [
+      {urgent: svc.message},
+      {dim: "Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise."},
+      {buttons: [
+        {text: "Sign in", argv: ["omarchy", "launch", "terminal", "pass-cli", "login"]},
+        {text: "Retry", action: "retry"}
+      ]}
+    ]},
+    {states: ["LOCKED"], spacing: Style.space(10), blocks: [
+      {urgent: svc.message, wrap: Text.NoWrap},
+      {buttons: [
+        {text: "Unlock", argv: ["omarchy", "launch", "terminal", "pass-cli", "session", "unlock"]},
+        {text: "Retry", action: "retry"}
+      ]}
+    ]},
+    {states: ["UNREACHABLE", "ERROR"], spacing: Style.space(10), blocks: [
+      {urgent: svc.message},
+      {buttons: [{text: "Retry", action: "retry"}]}
+    ]}
+  ]
+
+  readonly property var activeStateView: {
+    for (var i = 0; i < stateViews.length; i++)
+      if (stateViews[i].states.indexOf(svc.state) !== -1)
+        return stateViews[i]
+    return null
+  }
+
+  function runStateAction(button) {
+    if (button.argv !== undefined) { launchTerminal(button.argv); return }
+    if (button.action === "recheck") { svc.recheck(); return }
+    svc.retry()
+  }
 
   readonly property var selectedItem: {
     var rows = svc.displayItems
@@ -189,13 +285,20 @@ Panel {
     close()
   }
 
+  function emptyToast() {
+    return {text: "", pending: false, createdShareId: "", createdItemId: ""}
+  }
+
+  function clearToast() {
+    toastTimer.stop()
+    toast = emptyToast()
+  }
+
   function showToast(message) {
-    createdShareId = ""
-    createdItemId = ""
-    toastPending = false
+    clearToast()
     copyPendingKey = ""
-    toastText = String(message || "")
-    if (toastText !== "") toastTimer.restart()
+    toast = {text: String(message || ""), pending: false, createdShareId: "", createdItemId: ""}
+    if (toast.text !== "") toastTimer.restart()
   }
 
   // Shown in the same frame as the click. Deliberately not auto-dismissed here:
@@ -203,16 +306,16 @@ Panel {
   // for the paths that change state instead of emitting a result toast.
   function showPendingToast(message) {
     toastTimer.stop()
-    toastPending = true
-    toastText = String(message || "")
+    // The created-login pair survives: copying the new password from the
+    // "Login created" toast swaps its text without dismissing the button.
+    toast = {text: String(message || ""), pending: true,
+             createdShareId: toast.createdShareId, createdItemId: toast.createdItemId}
   }
 
   function showCreatedToast(shareId, itemId) {
-    createdShareId = String(shareId || "")
-    createdItemId = String(itemId || "")
-    toastPending = false
     copyPendingKey = ""
-    toastText = "Login created"
+    toast = {text: "Login created", pending: false,
+             createdShareId: String(shareId || ""), createdItemId: String(itemId || "")}
     toastTimer.restart()
   }
 
@@ -277,12 +380,8 @@ Panel {
     } else {
       disarmLogout()
       closeCreateForm()
-      toastTimer.stop()
-      toastText = ""
-      toastPending = false
+      clearToast()
       copyPendingKey = ""
-      createdShareId = ""
-      createdItemId = ""
       svc.onPanelClosed()
     }
   }
@@ -307,10 +406,10 @@ Panel {
       root.copyPendingKey = ""
       // Auth transitions and cli-missing end a copy without a result toast;
       // give the pending text a normal dismissal rather than leaving it up.
-      if (root.toastPending) toastTimer.restart()
+      if (root.toast.pending) toastTimer.restart()
     }
     function onCreateBusyChanged() {
-      if (!svc.createBusy && root.toastPending) toastTimer.restart()
+      if (!svc.createBusy && root.toast.pending) toastTimer.restart()
     }
     function onFilteredItemsChanged() { root.ensureCursor() }
     function onDisplayItemsChanged() { root.ensureCursor() }
@@ -325,12 +424,7 @@ Panel {
     id: toastTimer
     interval: 3000
     repeat: false
-    onTriggered: {
-      root.toastText = ""
-      root.toastPending = false
-      root.createdShareId = ""
-      root.createdItemId = ""
-    }
+    onTriggered: root.clearToast()
   }
 
   Timer {
@@ -453,36 +547,20 @@ Panel {
             visible: svc.state === "READY"
             spacing: Style.space(2)
 
-            PanelActionButton {
-              iconText: "󰑐"
-              tooltipText: "Refresh"
-              Accessible.role: Accessible.Button
-              Accessible.name: "Refresh Proton Pass"
-              enabled: !svc.refreshing
-              onClicked: svc.refresh()
-            }
-            PanelActionButton {
-              iconText: ""
-              tooltipText: root.createFormOpen ? "Close create form" : "Create login"
-              Accessible.role: Accessible.Button
-              Accessible.name: tooltipText
-              enabled: root.createControlsEnabled && svc.vaults.length > 0
-              focusable: true
-              onClicked: {
-                if (root.createFormOpen) {
-                  root.closeCreateForm()
-                  search.forceActiveFocus()
-                } else {
-                  root.openCreateForm()
-                }
+            Repeater {
+              model: root.headerActionSpecs
+
+              delegate: PanelActionButton {
+                required property var modelData
+                readonly property string label: root.headerActionLabel(modelData)
+                iconText: modelData.icon
+                tooltipText: modelData.tooltip !== undefined ? modelData.tooltip : label
+                Accessible.role: Accessible.Button
+                Accessible.name: modelData.name !== undefined ? modelData.name : label
+                enabled: root.headerActionEnabled(modelData)
+                focusable: modelData.focusable === true
+                onClicked: root.runHeaderAction(modelData)
               }
-            }
-            PanelActionButton {
-              iconText: "󰌾"
-              tooltipText: "Lock Proton Pass"
-              Accessible.role: Accessible.Button
-              Accessible.name: "Lock Proton Pass"
-              onClicked: svc.lock()
             }
             Button {
               property real reservedWidth: 0
@@ -809,17 +887,15 @@ Panel {
               horizontalAlignment: Text.AlignHCenter
             }
 
-            Text {
+            PanelSectionHeader {
               visible: svc.displayingRecents
               width: parent.width
               topPadding: Style.space(8)
               leftPadding: Style.space(10)
               text: "Recent"
               textFormat: Text.PlainText
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
             }
 
             Repeater {
@@ -828,17 +904,20 @@ Panel {
               delegate: loginRowDelegate
             }
 
-            Text {
+            PanelSectionHeader {
+              id: allSectionHeader
               visible: svc.query === "" && svc.items.length > 0
               width: parent.width
-              topPadding: svc.displayingRecents ? Style.space(8) : 0
+              // PanelSectionHeader reserves a sliver above the glyph so a header
+              // sitting at the top of this clipping list is not beheaded. Keep at
+              // least that much when the gap under "Recent" does not apply.
+              topPadding: svc.displayingRecents
+                ? Style.space(8) : Math.ceil(allSectionHeader.fontSize * 0.15)
               leftPadding: Style.space(10)
               text: "All"
               textFormat: Text.PlainText
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
             }
 
             Repeater {
@@ -922,35 +1001,22 @@ Panel {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Style.space(2)
 
-                    PanelActionButton {
-                      readonly property bool pending: root.copyPendingFor(loginRow.modelData.itemId, "username")
-                      iconText: pending ? "󰔟" : ""
-                      foreground: root.foreground
-                      fontFamily: root.fontFamily
-                      enabled: !svc.copyBusy
-                      Accessible.role: Accessible.Button
-                      Accessible.name: pending ? "Copying username…" : "Copy username"
-                      onClicked: root.requestCopy(loginRow.modelData.shareId, loginRow.modelData.itemId, "username")
-                    }
-                    PanelActionButton {
-                      readonly property bool pending: root.copyPendingFor(loginRow.modelData.itemId, "password")
-                      iconText: pending ? "󰔟" : ""
-                      foreground: root.foreground
-                      fontFamily: root.fontFamily
-                      enabled: !svc.copyBusy
-                      Accessible.role: Accessible.Button
-                      Accessible.name: pending ? "Copying password…" : "Copy password"
-                      onClicked: root.requestCopy(loginRow.modelData.shareId, loginRow.modelData.itemId, "password")
-                    }
-                    PanelActionButton {
-                      readonly property bool pending: root.copyPendingFor(loginRow.modelData.itemId, "totp")
-                      iconText: pending ? "󰔟" : ""
-                      foreground: root.foreground
-                      fontFamily: root.fontFamily
-                      enabled: !svc.copyBusy
-                      Accessible.role: Accessible.Button
-                      Accessible.name: pending ? "Copying TOTP code…" : "Copy TOTP code"
-                      onClicked: root.requestCopy(loginRow.modelData.shareId, loginRow.modelData.itemId, "totp")
+                    Repeater {
+                      model: root.copyActionSpecs
+
+                      delegate: PanelActionButton {
+                        required property var modelData
+                        readonly property bool pending: root.copyPendingFor(
+                          loginRow.modelData.itemId, modelData.field)
+                        iconText: pending ? "󰔟" : modelData.icon
+                        foreground: root.foreground
+                        fontFamily: root.fontFamily
+                        enabled: !svc.copyBusy
+                        Accessible.role: Accessible.Button
+                        Accessible.name: pending ? modelData.busyName : modelData.name
+                        onClicked: root.requestCopy(
+                          loginRow.modelData.shareId, loginRow.modelData.itemId, modelData.field)
+                      }
                     }
                   }
                 }
@@ -960,255 +1026,123 @@ Panel {
           }
 
           Column {
-            visible: svc.state === "INIT" || svc.state === "LOADING"
+            id: stateView
+            readonly property var view: root.activeStateView
+            visible: view !== null
             width: parent.width
-            spacing: Style.space(8)
+            spacing: view ? view.spacing : 0
 
-            Text {
-              width: parent.width
-              topPadding: Style.space(32)
-              bottomPadding: Style.space(32)
-              text: svc.state === "LOADING" ? "Loading Proton Pass logins…" : "Checking Proton Pass CLI…"
-              textFormat: Text.PlainText
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-            }
-          }
+            Repeater {
+              model: stateView.view ? stateView.view.blocks : []
 
-          Column {
-            visible: svc.state === "MISSING_DEPS"
-            width: parent.width
-            spacing: Style.space(10)
-
-            Text {
-              width: parent.width
-              text: "Proton Pass CLI not found or wl-clipboard is unavailable"
-              textFormat: Text.PlainText
-              color: root.urgent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              font.bold: true
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
-            }
-            Text {
-              width: parent.width
-              text: svc.message
-              textFormat: Text.PlainText
-              color: root.urgent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
-            }
-            Text {
-              width: parent.width
-              text: "Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible."
-              textFormat: Text.PlainText
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
+              delegate: Loader {
+                id: blockLoader
+                required property var modelData
+                // No explicit height: the Loader adopts the block's implicitHeight
+                // and resizes the block to match. Binding height to
+                // item.implicitHeight instead makes the two chase each other.
+                width: parent.width
+                sourceComponent: modelData.command !== undefined
+                  ? commandBlock
+                  : (modelData.buttons !== undefined ? buttonsBlock : textBlock)
+                onLoaded: item.spec = blockLoader.modelData
+              }
             }
 
-            BorderSurface {
-              width: parent.width
-              implicitHeight: installerText.implicitHeight + Style.space(18)
-              borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
+            Component {
+              id: textBlock
+
+              // Two tones: urgent names what went wrong, dim explains it. The
+              // shape they share -- centred, wrapped, body or small-body -- is
+              // the default, so a block only spells out where it differs.
               Text {
-                id: installerText
-                anchors.left: parent.left
-                anchors.right: installerCopy.left
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.margins: Style.space(9)
-                text: "curl -fsSL https://proton.me/download/pass-cli/install.sh | bash"
+                property var spec: ({})
+                readonly property bool urgentTone: spec.urgent !== undefined
+                text: urgentTone ? spec.urgent : (spec.dim !== undefined ? spec.dim : "")
                 textFormat: Text.PlainText
-                color: root.foreground
+                color: urgentTone ? root.urgent : root.dim
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WrapAnywhere
-              }
-              PanelActionButton {
-                id: installerCopy
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.rightMargin: Style.space(8)
-                iconText: ""
-                tooltipText: "Copy official installer command"
-                Accessible.role: Accessible.Button
-                Accessible.name: "Copy official installer command"
-                onClicked: root.copySetupCommand(installerText.text)
+                font.pixelSize: spec.size !== undefined
+                  ? spec.size : (urgentTone ? Style.font.body : Style.font.bodySmall)
+                font.bold: spec.bold === true
+                horizontalAlignment: spec.align !== undefined ? spec.align : Text.AlignHCenter
+                wrapMode: spec.wrap !== undefined ? spec.wrap : Text.WordWrap
+                topPadding: spec.topPad !== undefined ? spec.topPad : 0
+                bottomPadding: spec.bottomPad !== undefined ? spec.bottomPad : 0
               }
             }
 
-            BorderSurface {
-              width: parent.width
-              implicitHeight: archText.implicitHeight + Style.space(18)
-              borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
-              Text {
-                id: archText
-                anchors.left: parent.left
-                anchors.right: archCopy.left
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.margins: Style.space(9)
-                text: "yay -S proton-pass-cli-bin"
-                textFormat: Text.PlainText
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-              }
-              PanelActionButton {
-                id: archCopy
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.rightMargin: Style.space(8)
-                iconText: ""
-                tooltipText: "Copy Arch AUR command"
-                Accessible.role: Accessible.Button
-                Accessible.name: "Copy Arch AUR command"
-                onClicked: root.copySetupCommand(archText.text)
-              }
-            }
+            Component {
+              id: commandBlock
 
-            Text {
-              width: parent.width
-              text: "Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin."
-              textFormat: Text.PlainText
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              wrapMode: Text.WordWrap
-            }
+              BorderSurface {
+                property var spec: ({})
+                implicitHeight: commandText.implicitHeight + Style.space(18)
+                borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
 
-            BorderSurface {
-              width: parent.width
-              implicitHeight: clipboardText.implicitHeight + Style.space(18)
-              borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
-              Text {
-                id: clipboardText
-                anchors.left: parent.left
-                anchors.right: clipboardCopy.left
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.margins: Style.space(9)
-                text: "sudo pacman -S wl-clipboard"
-                textFormat: Text.PlainText
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-              }
-              PanelActionButton {
-                id: clipboardCopy
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.rightMargin: Style.space(8)
-                iconText: ""
-                tooltipText: "Copy wl-clipboard install command"
-                Accessible.role: Accessible.Button
-                Accessible.name: "Copy wl-clipboard install command"
-                onClicked: root.copySetupCommand(clipboardText.text)
+                Text {
+                  id: commandText
+                  anchors.left: parent.left
+                  anchors.right: commandCopy.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.margins: Style.space(9)
+                  text: spec.command !== undefined ? spec.command : ""
+                  textFormat: Text.PlainText
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  wrapMode: spec.wrap !== undefined ? spec.wrap : Text.NoWrap
+                }
+
+                PanelActionButton {
+                  id: commandCopy
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.rightMargin: Style.space(8)
+                  iconText: ""
+                  tooltipText: spec.name
+                  Accessible.role: Accessible.Button
+                  Accessible.name: spec.name
+                  onClicked: root.copySetupCommand(commandText.text)
+                }
               }
             }
 
-            Button {
-              anchors.horizontalCenter: parent.horizontalCenter
-              text: "Recheck"
-              onClicked: svc.recheck()
-            }
-          }
+            Component {
+              id: buttonsBlock
 
-          Column {
-            visible: svc.state === "LOGGED_OUT"
-            width: parent.width
-            spacing: Style.space(10)
+              Item {
+                property var spec: ({})
+                implicitHeight: stateButtons.implicitHeight
 
-            Text {
-              width: parent.width
-              text: svc.message
-              textFormat: Text.PlainText
-              color: root.urgent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
-            }
-            Text {
-              width: parent.width
-              text: "Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise."
-              textFormat: Text.PlainText
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
-            }
-            Row {
-              anchors.horizontalCenter: parent.horizontalCenter
-              spacing: Style.space(8)
-              Button {
-                text: "Sign in"
-                onClicked: root.launchTerminal(["omarchy", "launch", "terminal", "pass-cli", "login"])
+                Row {
+                  id: stateButtons
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  spacing: Style.space(8)
+
+                  Repeater {
+                    model: spec.buttons !== undefined ? spec.buttons : []
+
+                    delegate: Button {
+                      required property var modelData
+                      text: modelData.text
+                      onClicked: root.runStateAction(modelData)
+                    }
+                  }
+                }
               }
-              Button { text: "Retry"; onClicked: svc.retry() }
-            }
-          }
-
-          Column {
-            visible: svc.state === "LOCKED"
-            width: parent.width
-            spacing: Style.space(10)
-            Text {
-              width: parent.width
-              text: svc.message
-              textFormat: Text.PlainText
-              color: root.urgent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-            }
-            Row {
-              anchors.horizontalCenter: parent.horizontalCenter
-              spacing: Style.space(8)
-              Button {
-                text: "Unlock"
-                onClicked: root.launchTerminal(["omarchy", "launch", "terminal", "pass-cli", "session", "unlock"])
-              }
-              Button { text: "Retry"; onClicked: svc.retry() }
-            }
-          }
-
-          Column {
-            visible: svc.state === "UNREACHABLE" || svc.state === "ERROR"
-            width: parent.width
-            spacing: Style.space(10)
-            Text {
-              width: parent.width
-              text: svc.message
-              textFormat: Text.PlainText
-              color: root.urgent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
-            }
-            Button {
-              anchors.horizontalCenter: parent.horizontalCenter
-              text: "Retry"
-              onClicked: svc.retry()
             }
           }
 
           BorderSurface {
-            visible: root.toastText !== ""
+            visible: root.toast.text !== ""
             width: parent.width
             implicitHeight: toastContent.implicitHeight + Style.space(18)
             color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
             borderSpec: Border.flat(Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.20), 1)
             radius: Style.cornerRadius
             Accessible.role: Accessible.AlertMessage
-            Accessible.name: root.toastText
+            Accessible.name: root.toast.text
 
             Row {
               id: toastContent
@@ -1221,7 +1155,7 @@ Panel {
                 width: Math.max(1, parent.width - (copyCreatedPassword.visible
                   ? copyCreatedPassword.width + parent.spacing : 0))
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.toastText
+                text: root.toast.text
                 textFormat: Text.PlainText
                 color: root.foreground
                 font.family: root.fontFamily
@@ -1232,9 +1166,9 @@ Panel {
 
               Button {
                 id: copyCreatedPassword
-                visible: root.createdShareId !== "" && root.createdItemId !== ""
+                visible: root.toast.createdShareId !== "" && root.toast.createdItemId !== ""
                 anchors.verticalCenter: parent.verticalCenter
-                readonly property bool pending: root.copyPendingFor(root.createdItemId, "password")
+                readonly property bool pending: root.copyPendingFor(root.toast.createdItemId, "password")
                 text: pending ? "Copying…" : "Copy password"
                 enabled: root.createControlsEnabled
                 focusable: true
@@ -1245,7 +1179,7 @@ Panel {
                 Accessible.name: copyCreatedPassword.pending
                   ? "Copying password for created login…"
                   : "Copy password for created login"
-                onClicked: root.requestCopy(root.createdShareId, root.createdItemId, "password")
+                onClicked: root.requestCopy(root.toast.createdShareId, root.toast.createdItemId, "password")
               }
             }
           }

@@ -129,9 +129,14 @@ jq -e '
 # is working in the same frame as the click, not after the response.
 assert_panel_contains $'  function requestCopy(shareId, itemId, field) {\n    if (!svc.copy(shareId, itemId, field)) return false\n    copyPendingKey = String(field) + "@" + String(itemId)\n    showPendingToast("Copying\u2026")' \
   "copy triggers do not show busy feedback before the helper responds"
+# The three copy icons render from one Repeater, so the contract is that the
+# spec table names both states and the delegate binds the pair -- the same
+# guarantee the three unrolled bindings used to give.
+assert_panel_contains 'Accessible.name: pending ? modelData.busyName : modelData.name' \
+  "the copy icon delegate does not name both its idle and busy state"
 for action in "username" "password" "TOTP code"; do
   assert_panel_contains \
-    "Accessible.name: pending ? \"Copying $action…\" : \"Copy $action\"" \
+    "name: \"Copy $action\", busyName: \"Copying $action…\"" \
     "the Copy $action icon button lacks an accessible name for both states"
 done
 
