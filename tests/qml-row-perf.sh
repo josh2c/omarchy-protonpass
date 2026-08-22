@@ -9,30 +9,33 @@
 # Timings are wall clock on a live session and will wobble; the number that is
 # a contract rather than a measurement is delegateSurvived.
 #
-# Needs a live Wayland session -- KeyboardPanel is a layer-shell surface and
-# will not lay out under the offscreen platform. Skips cleanly without one.
+# It runs inside a throwaway nested Hyprland on its own Wayland display. That is
+# not optional: the panel is a layer-shell surface that primes exclusive
+# keyboard focus, so running it on your own session steals the keyboard for the
+# length of the run and your typing lands in the panel's search field.
 #
 # Usage: tests/qml-row-perf.sh [output-file]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT=${1:-/dev/stdout}
 
-if ! command -v qs >/dev/null 2>&1; then
-  echo "row perf skipped (quickshell not installed)"
-  exit 0
-fi
-if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
-  echo "row perf skipped (no Wayland session)"
-  exit 0
-fi
+for tool in qs Hyprland; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "row perf skipped ($tool not installed)"
+    exit 0
+  fi
+done
 SHELL_TREE=${OMARCHY_PATH:-/usr/share/omarchy}/shell
 if [[ ! -d $SHELL_TREE/Ui ]]; then
   echo "row perf skipped (Omarchy shell tree not found at $SHELL_TREE)"
   exit 0
 fi
 
+# shellcheck source=tests/lib-nested-display.sh
+. "$(dirname "$0")/lib-nested-display.sh"
+
 sandbox=$(mktemp -d)
-trap 'rm -rf "$sandbox"' EXIT
+trap 'stop_nested_display; rm -rf "$sandbox"' EXIT
 
 # Quickshell resolves qs.Ui / qs.Commons relative to the config root, so the
 # harness runs inside a private copy of the shell tree with the plugin staged
@@ -50,9 +53,10 @@ sleep 300
 HELPER
 chmod +x "$sandbox/silent-helper"
 
-# XDG_RUNTIME_DIR is deliberately NOT sandboxed: the Wayland socket lives
-# there, and a layer-shell surface is the whole point of this harness.
-out=$(env QT_QPA_PLATFORM=wayland XDG_STATE_HOME="$sandbox/state" \
+start_nested_display "$sandbox" || exit 1
+
+out=$(env WAYLAND_DISPLAY="$NESTED_DISPLAY" QT_QPA_PLATFORM=wayland \
+  XDG_STATE_HOME="$sandbox/state" \
   OMARCHY_PROTONPASS_HELPER="$sandbox/silent-helper" \
   timeout 60 qs -p "$sandbox/cfg/harness.qml" 2>&1 || true)
 

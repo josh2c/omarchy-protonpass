@@ -88,6 +88,7 @@ ShellRoot {
   property var searchField: null
   property int caseIndex: -1
   property int focusTries: 0
+  property int inputRetries: 0
   property int contextIndex: 0
   property bool ready: false
 
@@ -129,6 +130,13 @@ ShellRoot {
 
   function wantedFocus() {
     return contexts[contextIndex] === "search" ? "search" : "catcher"
+  }
+
+  function droppedModifier() {
+    var text = String(searchField.text)
+    for (var i = 0; i < text.length; i++)
+      if (text.charCodeAt(i) < 32) return true
+    return false
   }
 
   function focusName() {
@@ -218,6 +226,22 @@ ShellRoot {
       waitForEnd: true
     }
     onExited: {
+      // A control character in the search field means the compositor delivered
+      // the key without its modifier -- Ctrl+U arriving as 0x15 rather than as
+      // a Ctrl chord. That is an input-delivery failure, not panel behaviour,
+      // and recording it would put a plausible-looking wrong row in the matrix.
+      if (harness.droppedModifier()) {
+        harness.inputRetries++
+        if (harness.inputRetries < 4) {
+          harness.applyScenario()
+          return
+        }
+        console.log("CASE " + harness.cases[harness.caseIndex].chord
+          + " ctx=" + harness.contexts[harness.contextIndex] + " INPUT-UNRELIABLE")
+        harness.next()
+        return
+      }
+      harness.inputRetries = 0
       var helper = String(logCollector.text).replace(/\n+$/, "").replace(/\n/g, " | ")
       console.log("CASE " + harness.cases[harness.caseIndex].chord
         + " ctx=" + harness.contexts[harness.contextIndex]

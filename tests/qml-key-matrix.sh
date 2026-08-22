@@ -32,13 +32,11 @@ if [[ ! -d $SHELL_TREE/Ui ]]; then
   exit 0
 fi
 
+# shellcheck source=tests/lib-nested-display.sh
+. "$(dirname "$0")/lib-nested-display.sh"
+
 sandbox=$(mktemp -d)
-nested_pid=""
-cleanup() {
-  [[ -n $nested_pid ]] && kill "$nested_pid" 2>/dev/null
-  rm -rf "$sandbox"
-}
-trap cleanup EXIT
+trap 'stop_nested_display; rm -rf "$sandbox"' EXIT
 
 mkdir -p "$sandbox/cfg/plugin" "$sandbox/state"
 cp -r "$SHELL_TREE/Commons" "$SHELL_TREE/Ui" "$SHELL_TREE/services" "$sandbox/cfg/"
@@ -57,55 +55,9 @@ chmod +x "$sandbox/silent-helper"
 : >"$sandbox/helper.log"
 : >"$sandbox/helper.pids"
 
-cat >"$sandbox/hypr.conf" <<'HYPR'
-monitor=,1200x900@60,0x0,1
-misc {
-  disable_hyprland_logo = true
-  disable_splash_rendering = true
-  force_default_wallpaper = 0
-}
-animations { enabled = false }
-decoration { blur { enabled = false } }
-HYPR
+start_nested_display "$sandbox" || exit 1
 
-Hyprland -c "$sandbox/hypr.conf" >"$sandbox/hypr.log" 2>&1 &
-nested_pid=$!
-
-# Identify the nested display by the lock file the compositor itself holds
-# open. Two tempting alternatives are wrong: diffing the socket directory
-# breaks when an earlier run left a stale socket behind, and asking the
-# compositor through exec-once reports the *host* display, because Hyprland
-# does not rewrite WAYLAND_DISPLAY in the environment its children inherit.
-# Getting this wrong would aim the synthetic keystrokes at the real session.
-nested_display=""
-for _ in $(seq 1 80); do
-  sleep 0.5
-  lock=""
-  for fd in /proc/"$nested_pid"/fd/*; do
-    target=$(readlink "$fd" 2>/dev/null) || continue
-    case $target in
-      /run/user/"$(id -u)"/wayland-*.lock) lock=$target; break ;;
-    esac
-  done
-  if [[ -n $lock ]]; then
-    nested_display=$(basename "$lock" .lock)
-    break
-  fi
-  kill -0 "$nested_pid" 2>/dev/null || break
-done
-if [[ -z $nested_display ]]; then
-  echo "FAIL: nested compositor did not start" >&2
-  tail -20 "$sandbox/hypr.log" >&2
-  exit 1
-fi
-# Refuse to type into the session running this script, whatever went wrong above.
-if [[ $nested_display == "${WAYLAND_DISPLAY:-}" ]]; then
-  echo "FAIL: refusing to run -- detected display $nested_display is this session" >&2
-  exit 1
-fi
-sleep 2
-
-out=$(env WAYLAND_DISPLAY="$nested_display" QT_QPA_PLATFORM=wayland \
+out=$(env WAYLAND_DISPLAY="$NESTED_DISPLAY" QT_QPA_PLATFORM=wayland \
   XDG_STATE_HOME="$sandbox/state" \
   MATRIX_KEYBINDS="${MATRIX_KEYBINDS:-}" MATRIX_LOG="$sandbox/helper.log" MATRIX_PIDS="$sandbox/helper.pids" \
   OMARCHY_PROTONPASS_HELPER="$sandbox/silent-helper" \
@@ -118,6 +70,11 @@ fi
 if ! grep -q "MATRIX-DONE" <<<"$out"; then
   echo "FAIL: key matrix did not complete" >&2
   sed -n '1,40p' <<<"$out" >&2
+  exit 1
+fi
+if grep -q "INPUT-UNRELIABLE" <<<"$out"; then
+  echo "FAIL: the compositor kept dropping modifiers -- rerun" >&2
+  grep "INPUT-UNRELIABLE" <<<"$out" >&2
   exit 1
 fi
 if grep -q "FOCUS-LOST" <<<"$out"; then

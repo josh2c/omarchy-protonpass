@@ -69,10 +69,18 @@ ShellRoot {
     {label: "READY_NO_MATCHES", setup: function(svc) {
       svc.state = "READY"; svc.items = harness.sampleItems; svc.query = "zzz" },
      ready: function(svc) { return svc.filteredItems.length === 0 }},
+    // Busy state is as perishable as a toast: if the panel blinks closed and
+    // the harness reopens it, onOpenedChanged clears both, and the capture then
+    // settles on a panel that is merely idle. Re-assert it each tick.
     {label: "READY_COPY_PENDING", setup: function(svc) {
       svc.state = "READY"; svc.items = harness.sampleItems
       harness.panelRoot.copyPendingKey = "password@item_b"
-      harness.panelRoot.showPendingToast("Copying…") }},
+      harness.panelRoot.showPendingToast("Copying…") },
+     sustain: function() {
+       harness.panelRoot.copyPendingKey = "password@item_b"
+       harness.panelRoot.showPendingToast("Copying…")
+     },
+     ready: function() { return String(harness.panelRoot.copyPendingKey) !== "" }},
     // Toasts dismiss themselves after three seconds, which is shorter than a
     // slow settle. Re-assert them each tick so the capture cannot race the
     // dismissal timer.
@@ -228,10 +236,48 @@ ShellRoot {
     for (var i = 0; i < kids.length; i++) sanitize(kids[i])
   }
 
+  // Some position reads come back internally impossible: two differently sized
+  // children of a Row sharing an x, or every child of a Column sharing a y.
+  // That is not a render -- it is mapToItem resolved against a parent chain
+  // that is still mid-polish, and it happens at certain surface sizes. Treat it
+  // as not settled and read again.
+  //
+  // This is not hypothetical tidiness. A dump carrying exactly that signature
+  // was mistaken for a layout regression in shipped code, and the fix attempts
+  // that followed were chasing an artifact.
+  function geometrySane(item) {
+    if (!item || item.visible === false) return true
+    var kids = item.children
+    if (!kids) return true
+    var name = String(item).split("(")[0]
+    var isRow = name.indexOf("QQuickRow") === 0
+    var isColumn = name.indexOf("QQuickColumn") === 0
+    if (isRow || isColumn) {
+      var seen = ({})
+      for (var i = 0; i < kids.length; i++) {
+        var kid = kids[i]
+        if (!kid || kid.visible === false) continue
+        // Non-visual children (Repeaters, Components) sit at the origin with no
+        // size and are not laid out; they cannot collide with anything.
+        if (kid.width === 0 && kid.height === 0) continue
+        var slot = String(isRow ? kid.x : kid.y)
+        if (seen[slot] === true) return false
+        seen[slot] = true
+      }
+    }
+    for (var j = 0; j < kids.length; j++)
+      if (!geometrySane(kids[j])) return false
+    return true
+  }
+
   function captureLines() {
     var content = keyboardPanel && keyboardPanel.contentItem.length > 0
       ? keyboardPanel.contentItem[0] : null
     if (!content || !content.visible) return null
+    if (!geometrySane(content)) {
+      console.log("DIAG geometry-inconsistent " + scenarios[stateIndex].label)
+      return null
+    }
     sanitize(content)
     // Park keyboard focus on the key catcher so the search field's focus fill
     // is the same in every capture instead of following whatever the compositor
@@ -324,6 +370,15 @@ ShellRoot {
     return check === undefined || check(harness.service)
   }
 
+  // A scenario whose precondition has stopped holding is not just unsettled --
+  // something undid it. Re-apply the setup rather than waiting for a state that
+  // will never come back on its own.
+  function reapply() {
+    var sustain = scenarios[stateIndex].sustain
+    if (sustain !== undefined) sustain()
+    else scenarios[stateIndex].setup(harness.service)
+  }
+
   function tick() {
     var sustain = scenarios[stateIndex].sustain
     if (sustain !== undefined) sustain()
@@ -334,6 +389,7 @@ ShellRoot {
       settledLines = null
       stableCount = 0
     } else if (!scenarioReady()) {
+      reapply()
       // A stable tree is not necessarily the right tree: without this, a
       // scenario can be captured before its own precondition holds and the
       // result looks settled because nothing is changing yet.
@@ -345,7 +401,7 @@ ShellRoot {
       // longer than one interval, and a scenario was captured with the previous
       // scenario's rows stacked at the same y. Require several matches and a
       // minimum settling time before believing the tree.
-      if (stableCount >= 3 && attempt >= 6) {
+      if (stableCount >= 6 && attempt >= 14) {
         emitLines(scenarios[stateIndex].label, lines)
         advance()
         return
