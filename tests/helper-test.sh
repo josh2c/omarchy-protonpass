@@ -96,9 +96,7 @@ assert_invalid_helper clear-now clear-now extra
 assert_invalid_helper recents recents
 assert_invalid_helper recents recents load extra
 assert_invalid_helper recents recents clear extra
-assert_invalid_helper recents recents note
-assert_invalid_helper recents recents note --share-id share --item-id 'bad item'
-assert_invalid_helper recents recents note --share-id share --item-id item --share-id other
+assert_invalid_helper recents recents note --share-id share --item-id item
 assert_invalid_helper recents recents unknown
 calls_after_invalid=$(jq -sc 'length' "$MOCK_CALLS_LOG")
 assert_eq "$calls_before_invalid" "$calls_after_invalid" "validation completes before pass-cli execution"
@@ -192,17 +190,20 @@ source "$HELPER"
 declare -A generated_passwords=()
 for generation_run in {1..25}; do
   generate_password || fail "password generation failed on run $generation_run"
-  [[ ${#GENERATED_PASSWORD} -eq 24 ]] || fail "generated password length on run $generation_run"
-  [[ $GENERATED_PASSWORD =~ ^[A-Za-z0-9!@#\$%\^\&*\(\)_+=-]+$ ]] || \
+  [[ ${#GENERATED_PASSWORD} -eq $FIXTURE_PASSWORD_LENGTH ]] || \
+    fail "generated password length on run $generation_run"
+  [[ $GENERATED_PASSWORD =~ $FIXTURE_PASSWORD_CHARSET_REGEX ]] || \
     fail "generated password charset on run $generation_run"
   [[ $GENERATED_PASSWORD =~ [A-Z] && $GENERATED_PASSWORD =~ [a-z] &&
-     $GENERATED_PASSWORD =~ [0-9] && $GENERATED_PASSWORD =~ [!@#\$%\^\&*\(\)_+=-] ]] || \
+     $GENERATED_PASSWORD =~ [0-9] && $GENERATED_PASSWORD =~ $FIXTURE_PASSWORD_SYMBOL_REGEX ]] || \
     fail "generated password class coverage on run $generation_run"
   [[ -z ${generated_passwords[$GENERATED_PASSWORD]:-} ]] || \
     fail "generated password repeated on run $generation_run"
   generated_passwords[$GENERATED_PASSWORD]=1
   GENERATED_PASSWORD=""
 done
+(( ${#RANDOM_POOL[@]} == 0 )) || fail "random pool retained words after generation"
+[[ -z ${RANDOM_WORD:-} ]] || fail "random pool retained its last word after generation"
 unset GENERATED_PASSWORD generated_passwords
 
 assert_classifier() {
@@ -247,7 +248,7 @@ for capture_run in {1..25}; do
   capture_stdout=""
   capture_stderr=""
   capture_status=0
-  run_pass_cli_captured capture_stdout capture_stderr capture_status 1 --version
+  run_pass_cli_captured false capture_stdout capture_stderr capture_status 1 --version
   assert_eq "0" "$capture_status" "captured runner stress status $capture_run"
   assert_eq "Proton Pass CLI 2.3.2 (mock)" "$capture_stdout" \
     "captured runner stress stdout $capture_run"
@@ -256,12 +257,18 @@ for capture_run in {1..25}; do
   capture_value=""
   capture_secret_stderr=""
   capture_secret_status=0
-  run_pass_cli_secret_captured capture_value capture_secret_stderr capture_secret_status 1 \
+  run_pass_cli_captured true capture_value capture_secret_stderr capture_secret_status 1 \
     item view --share-id share_fixture_1 --item-id item_fixture_1 --field password
   assert_eq "0" "$capture_secret_status" "secret runner stress status $capture_run"
   assert_eq "synthetic-value" "$capture_value" "secret runner stress value $capture_run"
   assert_eq "" "$capture_secret_stderr" "secret runner stress stderr $capture_run"
 done
+
+# The scratch file carries stderr only, and only for the length of one call.
+[[ -f $STDERR_CAPTURE_FILE && ! -L $STDERR_CAPTURE_FILE ]] || \
+  fail "captured stderr scratch file is missing or unsafe"
+assert_eq "600" "$(stat -c '%a' "$STDERR_CAPTURE_FILE")" "captured stderr scratch file mode"
+[[ ! -s $STDERR_CAPTURE_FILE ]] || fail "captured stderr scratch file retained content"
 
 set +e
 MOCK_SCENARIO=timeout-sleeps MOCK_SLEEP_SECONDS=1 run_pass_cli 0.02 vault list --output json >/dev/null 2>&1
@@ -331,28 +338,32 @@ hash_value() {
 RECENTS_FILE="$XDG_STATE_HOME/omarchy-protonpass/recents.json"
 CLIP_HASH_FILE="$XDG_RUNTIME_DIR/omarchy-protonpass.clip"
 
+# `recents note` was a public subcommand with no callers (R-C); the store is
+# exercised through the copy path, its only remaining writer.
+note_via_copy() {
+  local share_id=$1 item_id=$2 label=$3 response
+  response=$(MOCK_SCENARIO=ready "$HELPER" copy \
+    --share-id "$share_id" --item-id "$item_id" \
+    --field password --clear-seconds 0)
+  assert_jq '.state == "copied"' "$response" "$label"
+}
+
 for recent_number in {1..9}; do
-  recent_note=$("$HELPER" recents note \
-    --share-id "share_recent_$recent_number" \
-    --item-id "item_recent_$recent_number")
-  assert_jq '.state == "ok" and (has("recents")|not)' "$recent_note" "recents note $recent_number"
+  note_via_copy "share_recent_$recent_number" "item_recent_$recent_number" \
+    "recents note $recent_number"
 done
 recents_loaded=$("$HELPER" recents load)
 assert_jq '.state == "ok" and (.recents|length) == 8 and
   .recents[0].shareId == "share_recent_9" and .recents[0].itemId == "item_recent_9" and
   .recents[7].shareId == "share_recent_2" and
-  all(.recents[]; (keys|sort) == ["itemId","shareId","ts"] and (.ts|type) == "number")' \
+  all(.recents[]; '"$FIXTURE_RECENTS_ENTRY_SHAPE"')' \
   "$recents_loaded" "recents prunes to eight most-recent entries"
 assert_eq "600" "$(stat -c '%a' "$RECENTS_FILE")" "recents file mode"
 assert_jq 'keys == ["recents"] and (.recents|length) == 8 and
-  all(.recents[]; (keys|sort) == ["itemId","shareId","ts"] and
-    (.shareId|test("^[A-Za-z0-9+/=_-]+$")) and
-    (.itemId|test("^[A-Za-z0-9+/=_-]+$")) and
-    (.ts|type) == "number")' "$(<"$RECENTS_FILE")" \
+  all(.recents[]; '"$FIXTURE_RECENTS_ENTRY_SHAPE"')' "$(<"$RECENTS_FILE")" \
   "recents file contains only opaque ids and timestamps"
 
-promoted_note=$("$HELPER" recents note --item-id item_recent_4 --share-id share_recent_4)
-assert_jq '.state == "ok"' "$promoted_note" "recents promote existing item"
+note_via_copy share_recent_4 item_recent_4 "recents promote existing item"
 promoted_recents=$("$HELPER" recents load)
 assert_jq '(.recents|length) == 8 and .recents[0].shareId == "share_recent_4" and
   .recents[0].itemId == "item_recent_4" and
@@ -599,6 +610,23 @@ assert_jq '.state == "error" and (.message|contains("Copy failed"))' "$missing_w
 missing_wl_paste_clear=$("$HELPER" clear-now)
 assert_jq '.state == "error"' "$missing_wl_paste_clear" "clear-now missing wl-paste"
 ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
+
+# Callers may read the helper through a pipe rather than a command
+# substitution; capture must not depend on the caller's fd layout, and stdin
+# stays closed so nothing downstream waits on input.
+for piped_run in {1..5}; do
+  piped_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
+    --share-id share_fixture_1 --item-id item_fixture_1 \
+    --field password --clear-seconds 0 2>&1 </dev/null | tail -n1)
+  assert_jq '.state == "copied" and .field == "password"' "$piped_copy" \
+    "piped copy invocation $piped_run"
+done
+piped_index=$(MOCK_SCENARIO=ready "$HELPER" index --exclude-vaults '' 2>&1 </dev/null | tail -n1)
+assert_jq '.state == "ready"' "$piped_index" "piped index invocation"
+piped_clear=$(MOCK_WL_PASTE_VALUE=synthetic-value "$HELPER" clear-now 2>&1 </dev/null | tail -n1)
+assert_jq '.command == "clear-now"' "$piped_clear" "piped clear-now invocation"
+piped_lock=$(MOCK_SCENARIO=offline "$HELPER" lock 2>&1 </dev/null | tail -n1)
+assert_jq '.state == "unreachable"' "$piped_lock" "piped lock invocation"
 
 # Every command x scenario pair goes through here: the envelope contract, the
 # exit status, the silent stderr, and each command's payload for that state.

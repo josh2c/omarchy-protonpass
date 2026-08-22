@@ -12,25 +12,6 @@ readonly RECENTS_DIRNAME=omarchy-protonpass
 readonly RECENTS_BASENAME=recents.json
 readonly RECENTS_LIMIT=8
 
-emit_dispatch_error() {
-  jq -cn '{
-    schemaVersion: 1,
-    command: "unknown",
-    state: "error",
-    message: "Invalid helper arguments"
-  }'
-}
-
-emit_command_error() {
-  local command_name=$1
-  jq -cn --arg command "$command_name" '{
-    schemaVersion: 1,
-    command: $command,
-    state: "error",
-    message: "Invalid helper arguments"
-  }'
-}
-
 emit_doctor() {
   local state=$1 message=$2 pass_present=$3 version=$4 clipboard_present=$5
   jq -cn \
@@ -118,14 +99,10 @@ emit_copy_classified_failure() {
     "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
 }
 
-emit_lock() {
-  local state=$1 message=$2
-  jq -cn --arg state "$state" --arg message "$message" '{
-    schemaVersion: 1,
-    command: "lock",
-    state: $state,
-    message: $message
-  }'
+# An unrecognised command name reports as "unknown"; a recognised command with
+# bad flags reports under its own name.
+emit_argument_error() {
+  emit_simple "${1:-unknown}" error "Invalid helper arguments"
 }
 
 emit_simple() {
@@ -159,68 +136,84 @@ run_pass_cli() {
     timeout --foreground "${timeout_seconds}s" pass-cli "$@"
 }
 
-# The three namerefs are output parameters consumed by callers.
-# shellcheck disable=SC2034
-run_pass_cli_captured() {
-  local stdout_name=$1 stderr_name=$2 status_name=$3 timeout_seconds=$4
-  shift 4
-  local stderr_read stable_read stderr_write stderr_pid capture_write
-  local -n captured_stdout=$stdout_name captured_stderr=$stderr_name captured_status=$status_name
+# pass-cli stderr lands in a private scratch file for the length of one call.
+# A plain redirect cannot block; a pipe reader waiting for end-of-file can,
+# because any descendant the CLI leaves behind keeps the write end open.
+STDERR_CAPTURE_FILE=""
 
-  coproc STDERR_PIPE { cat; }
-  stderr_read=${STDERR_PIPE[0]}
-  exec {stable_read}<&"$stderr_read"
-  stderr_write=${STDERR_PIPE[1]}
-  stderr_pid=$STDERR_PIPE_PID
-  exec {capture_write}>&"$stderr_write"
-  exec {stderr_write}>&-
-
-  if captured_stdout=$(run_pass_cli "$timeout_seconds" "$@" 2>&"$capture_write"); then
-    captured_status=0
-  else
-    captured_status=$?
+open_stderr_capture() {
+  local directory=${XDG_RUNTIME_DIR:-} path created=false noclobber_was_set=false
+  if [[ -n $STDERR_CAPTURE_FILE ]]; then
+    return 0
   fi
-
-  exec {capture_write}>&-
-  captured_stderr=$(cat <&"$stable_read")
-  exec {stable_read}>&-
-  wait "$stderr_pid"
+  if [[ -z $directory || ! -d $directory || -L $directory ]]; then
+    directory=${TMPDIR:-/tmp}
+  fi
+  [[ -d $directory && ! -L $directory ]] || return 1
+  path=$directory/.omarchy-protonpass.stderr.$$
+  umask 077
+  # noclobber creates with O_EXCL, so an existing file or a planted symlink
+  # fails the open instead of being written through; mktemp then picks a name
+  # nobody can predict.
+  if [[ -o noclobber ]]; then
+    noclobber_was_set=true
+  fi
+  set -o noclobber
+  if : >"$path" 2>/dev/null; then created=true; fi
+  if [[ $noclobber_was_set == false ]]; then
+    set +o noclobber
+  fi
+  if [[ $created == false ]]; then
+    path=$(mktemp "$directory/.omarchy-protonpass.stderr.XXXXXX") || return 1
+  fi
+  STDERR_CAPTURE_FILE=$path
+  trap 'rm -f -- "$STDERR_CAPTURE_FILE"' EXIT
 }
 
-# The value nameref is the caller's single unexported secret variable.
+# The three namerefs are output parameters consumed by callers. With
+# preserve_trailing the captured value keeps every byte pass-cli wrote, so the
+# secret paths pass true; the metadata paths pass false and read like a plain
+# command substitution.
 # shellcheck disable=SC2034
-run_pass_cli_secret_captured() {
-  local value_name=$1 stderr_name=$2 status_name=$3 timeout_seconds=$4
-  shift 4
-  local stderr_read stable_read stderr_write stderr_pid capture_write
-  local -n captured_value=$value_name captured_stderr=$stderr_name captured_status=$status_name
+run_pass_cli_captured() {
+  local preserve_trailing=$1 stdout_name=$2 stderr_name=$3 status_name=$4 timeout_seconds=$5
+  shift 5
+  local stderr_target=/dev/null
+  local -n captured_stdout=$stdout_name captured_stderr=$stderr_name captured_status=$status_name
 
-  coproc SECRET_STDERR_PIPE { cat; }
-  stderr_read=${SECRET_STDERR_PIPE[0]}
-  exec {stable_read}<&"$stderr_read"
-  stderr_write=${SECRET_STDERR_PIPE[1]}
-  stderr_pid=$SECRET_STDERR_PIPE_PID
-  exec {capture_write}>&"$stderr_write"
-  exec {stderr_write}>&-
-
-  if captured_value=$(
-    run_pass_cli "$timeout_seconds" "$@" 2>&"$capture_write"
-    command_status=$?
-    printf x
-    exit "$command_status"
-  ); then
-    captured_status=0
-  else
-    captured_status=$?
+  if open_stderr_capture; then
+    stderr_target=$STDERR_CAPTURE_FILE
+    : >"$stderr_target"
   fi
 
-  exec {capture_write}>&-
-  captured_stderr=$(cat <&"$stable_read")
-  exec {stable_read}>&-
-  wait "$stderr_pid"
+  if [[ $preserve_trailing == true ]]; then
+    # The x sentinel fences the value so command substitution cannot eat a
+    # trailing newline that belongs to the secret.
+    if captured_stdout=$(
+      run_pass_cli "$timeout_seconds" "$@" 2>"$stderr_target"
+      command_status=$?
+      printf x
+      exit "$command_status"
+    ); then
+      captured_status=0
+    else
+      captured_status=$?
+    fi
+    captured_stdout=${captured_stdout%x}
+    captured_stdout=${captured_stdout%$'\n'}
+  else
+    if captured_stdout=$(run_pass_cli "$timeout_seconds" "$@" 2>"$stderr_target"); then
+      captured_status=0
+    else
+      captured_status=$?
+    fi
+  fi
 
-  captured_value=${captured_value%x}
-  captured_value=${captured_value%$'\n'}
+  captured_stderr=""
+  if [[ $stderr_target != /dev/null ]]; then
+    captured_stderr=$(<"$stderr_target")
+    : >"$stderr_target"
+  fi
 }
 
 # Outputs are globals so callers can classify without reparsing or serializing stderr.
@@ -286,8 +279,57 @@ classify_failure() {
   fi
 }
 
+# Every failing command classifies and then emits in the same shape, so the
+# twelve sites share one tail. no_field_message only applies to copy.
+fail_classified() {
+  local command_name=$1 status=$2 stderr_blob=$3 no_field_message=${4:-}
+  classify_failure "$command_name" "$status" "$stderr_blob"
+  case $command_name in
+    index) emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]' '[]' ;;
+    copy) emit_copy_classified_failure "$no_field_message" ;;
+    create) emit_create "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" ;;
+    lock) emit_simple lock "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" ;;
+    logout)
+      case $CLASSIFIED_STATE in
+        logged-out) emit_simple logout logged-out-ok "Already signed out of Proton Pass" ;;
+        cli-missing) emit_simple logout cli-missing "$CLASSIFIED_MESSAGE" ;;
+        unreachable) emit_simple logout unreachable "$CLASSIFIED_MESSAGE" ;;
+        *) emit_simple logout error "Could not sign out of Proton Pass" ;;
+      esac
+      ;;
+  esac
+}
+
 valid_id() {
   [[ $1 =~ ^[A-Za-z0-9+/=_-]{1,256}$ ]]
+}
+
+# One batched read of the kernel CSPRNG feeds every draw of a generation run;
+# rejection sampling below still decides each value on its own cutoff.
+RANDOM_POOL=()
+RANDOM_POOL_INDEX=0
+
+refill_random_pool() {
+  local -a words=()
+  read -r -a words -d '' < <(od -An -N256 -tu4 /dev/urandom) || true
+  (( ${#words[@]} > 0 )) || return 1
+  RANDOM_POOL=("${words[@]}")
+  RANDOM_POOL_INDEX=0
+}
+
+next_random_word() {
+  if (( RANDOM_POOL_INDEX >= ${#RANDOM_POOL[@]} )); then
+    refill_random_pool || return 1
+  fi
+  RANDOM_WORD=${RANDOM_POOL[RANDOM_POOL_INDEX]}
+  RANDOM_POOL_INDEX=$((RANDOM_POOL_INDEX + 1))
+}
+
+wipe_random_pool() {
+  RANDOM_POOL=()
+  RANDOM_POOL_INDEX=0
+  RANDOM_WORD=""
+  unset RANDOM_WORD
 }
 
 random_below() {
@@ -295,7 +337,8 @@ random_below() {
   (( limit > 0 )) || return 1
   cutoff=$((4294967296 - (4294967296 % limit)))
   while :; do
-    read -r value < <(od -An -N4 -tu4 /dev/urandom) || return 1
+    next_random_word || return 1
+    value=$RANDOM_WORD
     [[ $value =~ ^[0-9]+$ ]] || continue
     if (( value < cutoff )); then
       RANDOM_BELOW=$((value % limit))
@@ -311,6 +354,15 @@ append_random_char() {
 }
 
 generate_password() {
+  if fill_generated_password; then
+    wipe_random_pool
+    return 0
+  fi
+  wipe_random_pool
+  return 1
+}
+
+fill_generated_password() {
   local uppercase='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
   local lowercase='abcdefghijklmnopqrstuvwxyz'
   local digits='0123456789'
@@ -429,8 +481,10 @@ write_recents_data() {
   directory=${path%/*}
   [[ ! -L $directory ]] || return 1
   umask 077
-  mkdir -p -- "$directory" || return 1
-  chmod 700 "$directory" || return 1
+  if [[ ! -d $directory ]]; then
+    mkdir -p -- "$directory" || return 1
+    chmod 700 "$directory" || return 1
+  fi
   temporary=$(mktemp "$directory/.recents.json.XXXXXX") || return 1
   if ! jq -cn --argjson recents "$recents" '{recents: $recents}' >"$temporary" ||
      ! chmod 600 "$temporary" ||
@@ -603,33 +657,6 @@ parse_recents_args() {
       (( $# == 1 )) || return 2
       RECENTS_OPERATION=clear
       ;;
-    note)
-      shift
-      local share_id="" item_id="" seen_share=false seen_item=false
-      while (( $# > 0 )); do
-        case $1 in
-          --share-id)
-            if [[ $seen_share == true || $# -lt 2 ]]; then return 2; fi
-            share_id=$2
-            seen_share=true
-            shift 2
-            ;;
-          --item-id)
-            if [[ $seen_item == true || $# -lt 2 ]]; then return 2; fi
-            item_id=$2
-            seen_item=true
-            shift 2
-            ;;
-          *) return 2 ;;
-        esac
-      done
-      [[ $seen_share == true && $seen_item == true ]] || return 2
-      valid_id "$share_id" || return 2
-      valid_id "$item_id" || return 2
-      RECENTS_OPERATION=note
-      RECENTS_SHARE_ID=$share_id
-      RECENTS_ITEM_ID=$item_id
-      ;;
     *) return 2 ;;
   esac
 }
@@ -649,16 +676,14 @@ index_command() {
   local vault_status=0 vault_json share_id item_stdout item_stderr item_status mapped
 
   if ! command -v pass-cli >/dev/null 2>&1; then
-    classify_failure index 127 ""
-    emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]' '[]'
+    fail_classified index 127 ""
     return 0
   fi
 
-  run_pass_cli_captured vault_stdout vault_stderr vault_status \
+  run_pass_cli_captured false vault_stdout vault_stderr vault_status \
     "$INDEX_TIMEOUT_SECONDS" vault list --output json
   if (( vault_status != 0 )); then
-    classify_failure index "$vault_status" "$vault_stderr"
-    emit_index "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" '[]' '[]' '[]'
+    fail_classified index "$vault_status" "$vault_stderr"
     return 0
   fi
 
@@ -684,7 +709,7 @@ index_command() {
 
   while IFS= read -r vault_json; do
     share_id=$(jq -r '.share_id' <<<"$vault_json")
-    run_pass_cli_captured item_stdout item_stderr item_status \
+    run_pass_cli_captured false item_stdout item_stderr item_status \
       "$INDEX_TIMEOUT_SECONDS" item list \
       --share-id "$share_id" \
       --filter-type login \
@@ -733,9 +758,7 @@ copy_command() {
   local -a copy_args=(--sensitive)
 
   if ! command -v pass-cli >/dev/null 2>&1; then
-    classify_failure copy 127 ""
-    emit_copy "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE" \
-      "$COPY_FIELD" false "$COPY_CLEAR_SECONDS"
+    fail_classified copy 127 ""
     return 0
   fi
   if ! command -v wl-copy >/dev/null 2>&1 ||
@@ -747,7 +770,7 @@ copy_command() {
 
   case $COPY_FIELD in
     username)
-      run_pass_cli_secret_captured val stderr_blob status \
+      run_pass_cli_captured true val stderr_blob status \
         "$COPY_TIMEOUT_SECONDS" item view \
         --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field username
       if (( status != 0 )); then
@@ -759,12 +782,11 @@ copy_command() {
         fi
       fi
       if (( status != 0 )) || [[ -z $val ]]; then
-        run_pass_cli_secret_captured val stderr_blob status \
+        run_pass_cli_captured true val stderr_blob status \
           "$COPY_TIMEOUT_SECONDS" item view \
           --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field email
         if (( status != 0 )); then
-          classify_failure copy "$status" "$stderr_blob"
-          emit_copy_classified_failure "No username or email on this item"
+          fail_classified copy "$status" "$stderr_blob" "No username or email on this item"
           unset val
           return 0
         fi
@@ -778,12 +800,11 @@ copy_command() {
       fi
       ;;
     password)
-      run_pass_cli_secret_captured val stderr_blob status \
+      run_pass_cli_captured true val stderr_blob status \
         "$COPY_TIMEOUT_SECONDS" item view \
         --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field password
       if (( status != 0 )); then
-        classify_failure copy "$status" "$stderr_blob"
-        emit_copy_classified_failure "No password on this item"
+        fail_classified copy "$status" "$stderr_blob" "No password on this item"
         unset val
         return 0
       fi
@@ -795,12 +816,11 @@ copy_command() {
       fi
       ;;
     totp)
-      run_pass_cli_secret_captured val stderr_blob status \
+      run_pass_cli_captured true val stderr_blob status \
         "$COPY_TIMEOUT_SECONDS" item totp \
         --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --output json
       if (( status != 0 )); then
-        classify_failure copy "$status" "$stderr_blob"
-        emit_copy_classified_failure "No TOTP on this item"
+        fail_classified copy "$status" "$stderr_blob" "No TOTP on this item"
         unset val
         return 0
       fi
@@ -851,6 +871,7 @@ copy_command() {
   if (( COPY_CLEAR_SECONDS > 0 )); then
     secs=$COPY_CLEAR_SECONDS
     ( exec >/dev/null 2>&1 </dev/null
+      trap - EXIT
       sleep "$secs"
       read_clip_hash || exit 0
       stored=$CLIP_HASH
@@ -893,7 +914,8 @@ clear_now_command() {
     emit_simple clear-now not-owner "Clipboard is not owned by Proton Pass"
     return 0
   fi
-  if ! read_clip_hash || [[ $CLIP_HASH != "$hash" ]] || ! wl-copy --clear >/dev/null 2>&1; then
+  # Closing stdin keeps a clear from ever waiting on the caller's input.
+  if ! read_clip_hash || [[ $CLIP_HASH != "$hash" ]] || ! wl-copy --clear </dev/null >/dev/null 2>&1; then
     emit_simple clear-now error "Could not clear the clipboard"
     return 0
   fi
@@ -909,13 +931,6 @@ recents_command() {
         emit_recents ok "Recent items ready" "$RECENTS_DATA"
       else
         emit_recents error "Could not load recent items" '[]'
-      fi
-      ;;
-    note)
-      if note_recent "$RECENTS_SHARE_ID" "$RECENTS_ITEM_ID"; then
-        emit_simple recents ok "Recent item saved"
-      else
-        emit_simple recents error "Could not save recent item"
       fi
       ;;
     clear)
@@ -942,8 +957,7 @@ create_command() {
   if ! command -v pass-cli >/dev/null 2>&1; then
     CREATE_INPUT=""
     unset CREATE_INPUT
-    classify_failure create 127 ""
-    emit_create "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
+    fail_classified create 127 ""
     return 0
   fi
 
@@ -966,7 +980,7 @@ create_command() {
     return 0
   fi
 
-  run_pass_cli_captured stdout stderr_blob status \
+  run_pass_cli_captured false stdout stderr_blob status \
     "$CREATE_TIMEOUT_SECONDS" item create login \
     --share-id "$CREATE_SHARE_ID" --from-template - < <(
       jq -c --rawfile generatedPassword "/dev/fd/$password_read" '
@@ -987,8 +1001,7 @@ create_command() {
   unset password CREATE_INPUT
 
   if (( status != 0 )); then
-    classify_failure create "$status" "$stderr_blob"
-    emit_create "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
+    fail_classified create "$status" "$stderr_blob"
     return 0
   fi
   if ! valid_id "$stdout"; then
@@ -1005,19 +1018,17 @@ lock_command() {
   local stdout="" stderr_blob="" status=0
 
   if ! command -v pass-cli >/dev/null 2>&1; then
-    classify_failure lock 127 ""
-    emit_lock "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
+    fail_classified lock 127 ""
     return 0
   fi
 
-  run_pass_cli_captured stdout stderr_blob status \
+  run_pass_cli_captured false stdout stderr_blob status \
     "$LOCK_TIMEOUT_SECONDS" session lock
   : "$stdout"
   if (( status == 0 )); then
-    emit_lock locked "Session locked"
+    emit_simple lock locked "Session locked"
   else
-    classify_failure lock "$status" "$stderr_blob"
-    emit_lock "$CLASSIFIED_STATE" "$CLASSIFIED_MESSAGE"
+    fail_classified lock "$status" "$stderr_blob"
   fi
 }
 
@@ -1029,7 +1040,7 @@ logout_command() {
     return 0
   fi
 
-  run_pass_cli_captured stdout stderr_blob status \
+  run_pass_cli_captured false stdout stderr_blob status \
     "$LOGOUT_TIMEOUT_SECONDS" logout
   : "$stdout"
   if (( status == 0 )); then
@@ -1037,19 +1048,13 @@ logout_command() {
     return 0
   fi
 
-  classify_failure logout "$status" "$stderr_blob"
-  case $CLASSIFIED_STATE in
-    logged-out) emit_simple logout logged-out-ok "Already signed out of Proton Pass" ;;
-    cli-missing) emit_simple logout cli-missing "$CLASSIFIED_MESSAGE" ;;
-    unreachable) emit_simple logout unreachable "$CLASSIFIED_MESSAGE" ;;
-    *) emit_simple logout error "Could not sign out of Proton Pass" ;;
-  esac
+  fail_classified logout "$status" "$stderr_blob"
 }
 
 main() {
   local command_name
   if (( $# == 0 )); then
-    emit_dispatch_error
+    emit_argument_error
     return 2
   fi
 
@@ -1057,39 +1062,39 @@ main() {
   shift
   case $command_name in
     doctor)
-      if (( $# != 0 )); then emit_command_error doctor; return 2; fi
+      if (( $# != 0 )); then emit_argument_error doctor; return 2; fi
       doctor_command
       ;;
     index)
-      if ! parse_index_args "$@"; then emit_command_error index; return 2; fi
+      if ! parse_index_args "$@"; then emit_argument_error index; return 2; fi
       index_command
       ;;
     copy)
-      if ! parse_copy_args "$@"; then emit_command_error copy; return 2; fi
+      if ! parse_copy_args "$@"; then emit_argument_error copy; return 2; fi
       copy_command
       ;;
     create)
-      if ! parse_create_args "$@"; then emit_command_error create; return 2; fi
+      if ! parse_create_args "$@"; then emit_argument_error create; return 2; fi
       create_command
       ;;
     lock)
-      if (( $# != 0 )); then emit_command_error lock; return 2; fi
+      if (( $# != 0 )); then emit_argument_error lock; return 2; fi
       lock_command
       ;;
     logout)
-      if (( $# != 0 )); then emit_command_error logout; return 2; fi
+      if (( $# != 0 )); then emit_argument_error logout; return 2; fi
       logout_command
       ;;
     clear-now)
-      if (( $# != 0 )); then emit_command_error clear-now; return 2; fi
+      if (( $# != 0 )); then emit_argument_error clear-now; return 2; fi
       clear_now_command
       ;;
     recents)
-      if ! parse_recents_args "$@"; then emit_command_error recents; return 2; fi
+      if ! parse_recents_args "$@"; then emit_argument_error recents; return 2; fi
       recents_command
       ;;
     *)
-      emit_dispatch_error
+      emit_argument_error
       return 2
       ;;
   esac

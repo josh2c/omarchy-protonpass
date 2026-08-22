@@ -4,6 +4,8 @@ set -euo pipefail
 mock_self=$(readlink -f "${BASH_SOURCE[0]}")
 MOCK_ROOT=$(cd "$(dirname "$mock_self")/.." && pwd)
 FIXTURES=${MOCK_FIXTURES_DIR:-"$MOCK_ROOT/fixtures"}
+# shellcheck disable=SC1091
+source "$FIXTURES/contracts.sh"
 scenario=${MOCK_SCENARIO:-ready}
 
 record_call() {
@@ -150,18 +152,7 @@ if [[ ${1:-} == item && ${2:-} == create && ${3:-} == login ]]; then
   fi
 
   create_body=$(cat)
-  if ! jq -e '
-      type == "object" and
-      (keys | sort) == ["email", "password", "title", "totp_uri", "urls", "username"] and
-      (.title | type == "string" and length > 0 and length <= 500) and
-      (((.username | type == "string" and length <= 500) and .email == null) or
-       ((.email | type == "string" and length <= 500) and .username == null)) and
-      (.password | type == "string" and length == 24 and
-        test("^[A-Za-z0-9!@#$%^&*()_+=-]+$") and
-        test("[A-Z]") and test("[a-z]") and test("[0-9]") and
-        test("[!@#$%^&*()_+=-]")) and
-      .totp_uri == null and .urls == []
-    ' <<<"$create_body" >/dev/null 2>&1; then
+  if ! jq -e "$FIXTURE_CREATE_TEMPLATE_SHAPE" <<<"$create_body" >/dev/null 2>&1; then
     printf 'Error: Invalid synthetic create template\n' >&2
     exit 2
   fi

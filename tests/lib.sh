@@ -2,6 +2,10 @@
 
 TEST_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
+# Contract shapes shared with the mocks; see tests/fixtures/contracts.sh.
+# shellcheck disable=SC1091
+source "$TEST_ROOT/tests/fixtures/contracts.sh"
+
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
   exit 1

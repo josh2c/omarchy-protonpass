@@ -44,7 +44,7 @@ if grep -Fn -- '--password' "${security_sources[@]}" >/dev/null; then
 fi
 grep -Fq -- '--share-id "$CREATE_SHARE_ID" --from-template -' "$HELPER" ||
   fail "create does not use the fixed stdin-template command"
-grep -Fq -- 'od -An -N4 -tu4 /dev/urandom' "$HELPER" ||
+grep -Fq -- 'od -An -N256 -tu4 /dev/urandom' "$HELPER" ||
   fail "create password generation does not read /dev/urandom"
 grep -Fq -- 'unset password CREATE_INPUT' "$HELPER" ||
   fail "create does not wipe its password variable after the stdin pipe closes"
@@ -93,7 +93,7 @@ done
 if proc_file_contains_marker "/proc/$helper_pid/environ"; then
   fail "secret marker appeared in the helper environment"
 fi
-for internal_name in CLIP_HASH RECENTS_DATA RECENTS_SHARE_ID RECENTS_ITEM_ID; do
+for internal_name in CLIP_HASH RECENTS_DATA STDERR_CAPTURE_FILE; do
   if grep -Fzq -- "$internal_name=" "/proc/$helper_pid/environ" 2>/dev/null; then
     fail "helper exported internal storage variable: $internal_name"
   fi
@@ -128,10 +128,15 @@ recents_file="$XDG_STATE_HOME/omarchy-protonpass/recents.json"
 [[ -f $recents_file && ! -L $recents_file ]] || fail "recents file is missing or unsafe"
 assert_eq "600" "$(stat -c '%a' "$recents_file")" "recents file mode"
 assert_jq 'keys == ["recents"] and (.recents|length) == 1 and
-  all(.recents[]; (keys|sort) == ["itemId","shareId","ts"] and
-    (.itemId|type) == "string" and (.shareId|type) == "string" and
-    (.ts|type) == "number")' "$(<"$recents_file")" \
+  all(.recents[]; '"$FIXTURE_RECENTS_ENTRY_SHAPE"')' "$(<"$recents_file")" \
   "recents file contains only ids and timestamps"
+
+# stderr capture uses a scratch file for the length of one call; nothing may
+# outlive the helper in the runtime directory but the clipboard hash.
+while IFS= read -r runtime_file; do
+  [[ ${runtime_file##*/} == omarchy-protonpass.clip ]] ||
+    fail "helper left a scratch file behind: $runtime_file"
+done < <(find "$XDG_RUNTIME_DIR" -type f -print)
 
 : >"$MOCK_CALLS_LOG"
 logout_response=$(MOCK_SCENARIO=ready "$HELPER" logout)
