@@ -140,6 +140,10 @@ assert_panel_contains 'keyCatcher.forceActiveFocus()' \
   "search cannot hand keyboard focus to list mode"
 assert_panel_contains 'root.copySelected("password")' \
   "Enter does not copy the selected password"
+# Copies take 1.4-1.8 s of Proton round trip; the panel must state that it is
+# working in the same frame as the click rather than after the response.
+assert_panel_contains $'  function requestCopy(shareId, itemId, field) {\n    if (!svc.copy(shareId, itemId, field)) return false\n    copyPendingKey = String(field) + "@" + String(itemId)\n    showPendingToast("Copying\u2026")' \
+  "copy triggers do not show busy feedback before the helper responds"
 assert_panel_contains 'root.refocusSearch(event.text)' \
   "printable list keys do not refocus search"
 assert_panel_contains 'root.refocusSearch("")' \
@@ -202,8 +206,9 @@ assert_panel_contains 'text: "Clears in " + svc.clipboardSecondsRemaining + "s �
 assert_panel_contains 'onClicked: svc.clearClipboard()' \
   "the countdown cannot clear the clipboard immediately"
 for action in username password 'TOTP code'; do
-  assert_panel_contains "Accessible.name: \"Copy $action\"" \
-    "the Copy $action icon button lacks an accessible name"
+  assert_panel_contains \
+    "Accessible.name: pending ? \"Copying $action…\" : \"Copy $action\"" \
+    "the Copy $action icon button lacks an accessible name for both states"
 done
 assert_panel_not_contains 'function shortcutLabel(' \
   "the removed shortcut-label UI helper is still present"
@@ -215,12 +220,12 @@ assert_panel_not_contains 'tooltipText: "Copy TOTP code' \
   "the TOTP action still exposes shortcut hover chrome"
 assert_panel_not_contains 'u/p/t in list' \
   "the footer key legend is still present"
-assert_panel_contains 'iconText: ""' \
-  "the username action does not use the Nerd Font person icon"
-assert_panel_contains 'iconText: ""' \
-  "the password action does not use the Nerd Font key icon"
-assert_panel_contains 'iconText: ""' \
-  "the TOTP action does not use the Nerd Font clock icon"
+assert_panel_contains 'iconText: pending ? "󰔟" : ""' \
+  "the username action does not swap between its busy and Nerd Font person icons"
+assert_panel_contains 'iconText: pending ? "󰔟" : ""' \
+  "the password action does not swap between its busy and Nerd Font key icons"
+assert_panel_contains 'iconText: pending ? "󰔟" : ""' \
+  "the TOTP action does not swap between its busy and Nerd Font clock icons"
 [[ $PANEL_SOURCE != *'iconText: "u"'* && $PANEL_SOURCE != *'iconText: "p"'* && $PANEL_SOURCE != *'iconText: "t"'* ]] || \
   fail "a row action still renders as a letter button"
 assert_panel_contains 'interval: 3000' \
@@ -249,7 +254,7 @@ assert_panel_contains 'enabled: root.createControlsEnabled && root.createFormVal
   "invalid or busy create forms are not disabled"
 assert_panel_contains 'visible: root.createdShareId !== "" && root.createdItemId !== ""' \
   "successful creation does not expose a copy-password affordance"
-assert_panel_contains 'svc.copy(root.createdShareId, root.createdItemId, "password")' \
+assert_panel_contains 'root.requestCopy(root.createdShareId, root.createdItemId, "password")' \
   "the created-login affordance does not use the opaque copy seam"
 assert_panel_not_contains 'Use my own password' \
   "the removed custom-password flow is exposed in the panel"
