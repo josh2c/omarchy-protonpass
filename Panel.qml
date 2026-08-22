@@ -17,6 +17,12 @@ Panel {
   property bool cursorActive: false
   property int cursorIndex: 0
   property string toastText: ""
+  // Key of the control whose copy is in flight ("<field>@<itemId>"), so the
+  // clicked icon can show its own busy state while copyBusy stays global.
+  property string copyPendingKey: ""
+  // True while the toast holds a pending message ("Copying…"/"Creating…")
+  // that the result toast is expected to replace.
+  property bool toastPending: false
   property string setupClipboardText: ""
   property int statusTick: 0
   property bool logoutArmed: false
@@ -84,7 +90,20 @@ Panel {
 
   function copySelected(field) {
     if (!selectedItem || svc.copyBusy) return
-    svc.copy(selectedItem.shareId, selectedItem.itemId, field)
+    requestCopy(selectedItem.shareId, selectedItem.itemId, field)
+  }
+
+  // Single entry point for every copy trigger (row icon, keyboard action and
+  // the created-login toast button) so no site can forget the feedback.
+  function requestCopy(shareId, itemId, field) {
+    if (!svc.copy(shareId, itemId, field)) return false
+    copyPendingKey = String(field) + "@" + String(itemId)
+    showPendingToast("Copying…")
+    return true
+  }
+
+  function copyPendingFor(itemId, field) {
+    return copyPendingKey === String(field) + "@" + String(itemId)
   }
 
   function chordForEvent(event) {
@@ -173,13 +192,26 @@ Panel {
   function showToast(message) {
     createdShareId = ""
     createdItemId = ""
+    toastPending = false
+    copyPendingKey = ""
     toastText = String(message || "")
     if (toastText !== "") toastTimer.restart()
+  }
+
+  // Shown in the same frame as the click. Deliberately not auto-dismissed here:
+  // the result toast replaces it, and the busy-cleared handler arms the timer
+  // for the paths that change state instead of emitting a result toast.
+  function showPendingToast(message) {
+    toastTimer.stop()
+    toastPending = true
+    toastText = String(message || "")
   }
 
   function showCreatedToast(shareId, itemId) {
     createdShareId = String(shareId || "")
     createdItemId = String(itemId || "")
+    toastPending = false
+    copyPendingKey = ""
     toastText = "Login created"
     toastTimer.restart()
   }
@@ -203,7 +235,8 @@ Panel {
 
   function submitCreate() {
     if (!createFormValid || !createControlsEnabled) return
-    svc.create(createVaultShareId, createTitle.text, createIdentifierField, createIdentifier.text)
+    if (svc.create(createVaultShareId, createTitle.text, createIdentifierField, createIdentifier.text))
+      showPendingToast("Creating…")
   }
 
   function copySetupCommand(commandText) {
@@ -246,6 +279,8 @@ Panel {
       closeCreateForm()
       toastTimer.stop()
       toastText = ""
+      toastPending = false
+      copyPendingKey = ""
       createdShareId = ""
       createdItemId = ""
       svc.onPanelClosed()
@@ -267,6 +302,16 @@ Panel {
       root.showCreatedToast(shareId, itemId)
       Qt.callLater(function() { search.forceActiveFocus() })
     }
+    function onCopyBusyChanged() {
+      if (svc.copyBusy) return
+      root.copyPendingKey = ""
+      // Auth transitions and cli-missing end a copy without a result toast;
+      // give the pending text a normal dismissal rather than leaving it up.
+      if (root.toastPending) toastTimer.restart()
+    }
+    function onCreateBusyChanged() {
+      if (!svc.createBusy && root.toastPending) toastTimer.restart()
+    }
     function onFilteredItemsChanged() { root.ensureCursor() }
     function onDisplayItemsChanged() { root.ensureCursor() }
     function onStateChanged() {
@@ -282,6 +327,7 @@ Panel {
     repeat: false
     onTriggered: {
       root.toastText = ""
+      root.toastPending = false
       root.createdShareId = ""
       root.createdItemId = ""
     }
@@ -877,31 +923,34 @@ Panel {
                     spacing: Style.space(2)
 
                     PanelActionButton {
-                      iconText: ""
+                      readonly property bool pending: root.copyPendingFor(loginRow.modelData.itemId, "username")
+                      iconText: pending ? "󰔟" : ""
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       enabled: !svc.copyBusy
                       Accessible.role: Accessible.Button
-                      Accessible.name: "Copy username"
-                      onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "username")
+                      Accessible.name: pending ? "Copying username…" : "Copy username"
+                      onClicked: root.requestCopy(loginRow.modelData.shareId, loginRow.modelData.itemId, "username")
                     }
                     PanelActionButton {
-                      iconText: ""
+                      readonly property bool pending: root.copyPendingFor(loginRow.modelData.itemId, "password")
+                      iconText: pending ? "󰔟" : ""
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       enabled: !svc.copyBusy
                       Accessible.role: Accessible.Button
-                      Accessible.name: "Copy password"
-                      onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "password")
+                      Accessible.name: pending ? "Copying password…" : "Copy password"
+                      onClicked: root.requestCopy(loginRow.modelData.shareId, loginRow.modelData.itemId, "password")
                     }
                     PanelActionButton {
-                      iconText: ""
+                      readonly property bool pending: root.copyPendingFor(loginRow.modelData.itemId, "totp")
+                      iconText: pending ? "󰔟" : ""
                       foreground: root.foreground
                       fontFamily: root.fontFamily
                       enabled: !svc.copyBusy
                       Accessible.role: Accessible.Button
-                      Accessible.name: "Copy TOTP code"
-                      onClicked: svc.copy(loginRow.modelData.shareId, loginRow.modelData.itemId, "totp")
+                      Accessible.name: pending ? "Copying TOTP code…" : "Copy TOTP code"
+                      onClicked: root.requestCopy(loginRow.modelData.shareId, loginRow.modelData.itemId, "totp")
                     }
                   }
                 }
@@ -1185,15 +1234,18 @@ Panel {
                 id: copyCreatedPassword
                 visible: root.createdShareId !== "" && root.createdItemId !== ""
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Copy password"
+                readonly property bool pending: root.copyPendingFor(root.createdItemId, "password")
+                text: pending ? "Copying…" : "Copy password"
                 enabled: root.createControlsEnabled
                 focusable: true
                 foreground: root.foreground
                 fontFamily: root.fontFamily
                 fontSize: Style.font.caption
                 Accessible.role: Accessible.Button
-                Accessible.name: "Copy password for created login"
-                onClicked: svc.copy(root.createdShareId, root.createdItemId, "password")
+                Accessible.name: copyCreatedPassword.pending
+                  ? "Copying password for created login…"
+                  : "Copy password for created login"
+                onClicked: root.requestCopy(root.createdShareId, root.createdItemId, "password")
               }
             }
           }

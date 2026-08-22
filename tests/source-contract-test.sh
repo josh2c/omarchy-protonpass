@@ -124,4 +124,16 @@ jq -e '
   ([.barWidget.schema[] | select(.key == "keybinds" and .type == "string" and .defaultValue == "")] | length) == 1
 ' "$ROOT/manifest.json" >/dev/null || fail "the keybinds setting schema is missing"
 
+# --- Busy feedback fires before the helper responds ---------------------
+# Copies take 1.4-1.8 s of Proton round trip; the panel must state that it
+# is working in the same frame as the click, not after the response.
+assert_panel_contains $'  function requestCopy(shareId, itemId, field) {\n    if (!svc.copy(shareId, itemId, field)) return false\n    copyPendingKey = String(field) + "@" + String(itemId)\n    showPendingToast("Copying\u2026")' \
+  "copy triggers do not show busy feedback before the helper responds"
+for action in "username" "password" "TOTP code"; do
+  assert_panel_contains \
+    "Accessible.name: pending ? \"Copying $action…\" : \"Copy $action\"" \
+    "the Copy $action icon button lacks an accessible name for both states"
+done
+
+
 printf 'service and panel source contract tests passed\n'
