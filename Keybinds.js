@@ -6,9 +6,24 @@ var DEFAULT_BINDINGS = {
     "ctrl+t": "copy-totp",
     "ctrl+r": "refresh",
     "ctrl+l": "lock",
-    "ctrl+shift+x": "clear-clipboard"
+    "ctrl+shift+x": "clear-clipboard",
+
+    // List-focus bindings. The chord grammar always allowed bare letters; these
+    // lived hard-coded in the panel's key catcher instead, which is why binding
+    // one in settings silently shadowed it. They fire only when the search
+    // field does not have focus -- see isTypingChord in Panel.qml.
+    "u": "copy-username",
+    "p": "copy-password",
+    "t": "copy-totp",
+    "r": "refresh",
+    "shift+l": "lock",
+    "j": "cursor-down",
+    "k": "cursor-up"
 };
 
+// Actions a user may bind. Cursor movement is deliberately absent: it is bound
+// by default but is not part of the documented remap vocabulary, so binding it
+// by name stays an error rather than silently growing the public surface.
 var ACTIONS = [
     "copy-username",
     "copy-password",

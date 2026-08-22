@@ -1,3 +1,7 @@
+// Keybind parser assertions. Run through the suite that owns it:
+//   tests/source-contract-test.sh
+// or directly, passing the parser as an argument:
+//   node tests/keybinds-test.js Keybinds.js
 const fs = require("fs");
 const vm = require("vm");
 

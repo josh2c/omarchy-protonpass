@@ -230,6 +230,8 @@ Panel {
     case "copy-username": root.copySelected("username"); break
     case "copy-password": root.copySelected("password"); break
     case "copy-totp": root.copySelected("totp"); break
+    case "cursor-down": root.moveCursor(1); break
+    case "cursor-up": root.moveCursor(-1); break
     case "refresh": svc.refresh(); break
     case "lock": svc.lock(); break
     case "clear-clipboard":
@@ -241,13 +243,73 @@ Panel {
     }
   }
 
-  function handleChord(event) {
-    var action = effectiveKeybinds[chordForEvent(event)]
-    if (action === undefined)
-      return false
-    triggerAction(action)
-    event.accepted = true
-    return true
+  // A chord that still produces a printable character -- a letter with at most
+  // Shift -- must not fire an action while the search field has focus, or it
+  // would swallow the keystroke instead of typing it.
+  function isTypingChord(chord) {
+    return /^(shift\+)?[a-z]$/.test(chord)
+  }
+
+  // The panel's only key handler. fromSearch is the sole difference between
+  // the two focus contexts: it gates the printable chords and the fall-through
+  // that sends an unclaimed character to the search field, and it decides which
+  // way Tab and the down arrow hand focus over.
+  function handleKey(event, fromSearch) {
+    var chord = chordForEvent(event)
+    var action = effectiveKeybinds[chord]
+    if (action !== undefined && !(fromSearch && isTypingChord(chord))) {
+      triggerAction(action)
+      event.accepted = true
+      return
+    }
+
+    if (event.key === Qt.Key_Escape) {
+      layeredEscape()
+      event.accepted = true
+      return
+    }
+    if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+      if (fromSearch) {
+        if (!cursorActive) moveCursor(1)
+        keyCatcher.forceActiveFocus()
+      } else {
+        search.forceActiveFocus()
+      }
+      event.accepted = true
+      return
+    }
+    if (event.key === Qt.Key_Down) {
+      moveCursor(1)
+      // Arrowing down out of the search field hands the list the keyboard;
+      // arrowing up deliberately does not.
+      if (fromSearch) keyCatcher.forceActiveFocus()
+      event.accepted = true
+      return
+    }
+    if (event.key === Qt.Key_Up) {
+      moveCursor(-1)
+      event.accepted = true
+      return
+    }
+    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+      copySelected("password")
+      event.accepted = true
+      return
+    }
+
+    // Anything left over belongs to the search field. When it already has
+    // focus, leave it alone and let it type.
+    if (fromSearch)
+      return
+    if (event.text === "/") {
+      refocusSearch("")
+      event.accepted = true
+      return
+    }
+    if (event.text && event.text.length === 1) {
+      refocusSearch(event.text)
+      event.accepted = true
+    }
   }
 
   function syncedAgeText() {
@@ -483,47 +545,11 @@ Panel {
 
       // The stock catcher also reserves h/l/x/space. The v1 contract does
       // not: in list mode every printable key except the explicit actions
-      // below must refocus search and insert that character.
+      // must refocus search and insert that character.
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function(event) {
         if (keyCatcher.blocked) return
-        if (root.handleChord(event)) return
-        if (event.key === Qt.Key_Escape) {
-          root.layeredEscape(); event.accepted = true; return
-        }
-        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-          search.forceActiveFocus(); event.accepted = true; return
-        }
-        if (event.key === Qt.Key_Down || event.text === "j") {
-          root.moveCursor(1); event.accepted = true; return
-        }
-        if (event.key === Qt.Key_Up || event.text === "k") {
-          root.moveCursor(-1); event.accepted = true; return
-        }
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-          root.copySelected("password"); event.accepted = true; return
-        }
-        if (event.text === "u") {
-          root.copySelected("username"); event.accepted = true; return
-        }
-        if (event.text === "p") {
-          root.copySelected("password"); event.accepted = true; return
-        }
-        if (event.text === "t") {
-          root.copySelected("totp"); event.accepted = true; return
-        }
-        if (event.text === "L") {
-          svc.lock(); event.accepted = true; return
-        }
-        if (event.text === "r") {
-          svc.refresh(); event.accepted = true; return
-        }
-        if (event.text === "/") {
-          root.refocusSearch(""); event.accepted = true; return
-        }
-        if (event.text && event.text.length === 1) {
-          root.refocusSearch(event.text); event.accepted = true
-        }
+        root.handleKey(event, false)
       }
 
       PanelHero {
@@ -626,29 +652,7 @@ Panel {
             }
 
             Keys.priority: Keys.BeforeItem
-            Keys.onPressed: function(event) {
-              if (root.handleChord(event)) return
-              if (event.key === Qt.Key_Escape) {
-                root.layeredEscape(); event.accepted = true; return
-              }
-              if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                root.copySelected("password"); event.accepted = true; return
-              }
-              if (event.key === Qt.Key_Up) {
-                root.moveCursor(-1); event.accepted = true; return
-              }
-              if (event.key === Qt.Key_Down) {
-                root.moveCursor(1)
-                keyCatcher.forceActiveFocus()
-                event.accepted = true
-                return
-              }
-              if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-                if (!root.cursorActive) root.moveCursor(1)
-                keyCatcher.forceActiveFocus()
-                event.accepted = true
-              }
-            }
+            Keys.onPressed: function(event) { root.handleKey(event, true) }
           }
 
           BorderSurface {
