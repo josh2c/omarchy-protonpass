@@ -42,6 +42,8 @@ fi
 if grep -Fn -- '--password' "${security_sources[@]}" >/dev/null; then
   fail "runtime source places a password option in argv"
 fi
+# The pinned text is helper source, not an expansion.
+# shellcheck disable=SC2016
 grep -Fq -- '--share-id "$CREATE_SHARE_ID" --from-template -' "$HELPER" ||
   fail "create does not use the fixed stdin-template command"
 grep -Fq -- 'od -An -N256 -tu4 /dev/urandom' "$HELPER" ||
