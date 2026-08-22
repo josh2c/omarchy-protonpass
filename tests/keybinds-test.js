@@ -36,13 +36,11 @@ warnings = [];
 parsed = context.parse("CTRL+O:logout,ctrl+o:refresh", entry => warnings.push(entry));
 assert(parsed.bindings["ctrl+o"] === "refresh", "duplicate chords keep the last valid entry");
 assert(parsed.bindings["ctrl+p"] === "copy-password", "unlisted defaults remain");
-assert(parsed.preferred.refresh === "ctrl+o", "last custom binding becomes the displayed shortcut");
-assert(parsed.preferred.logout === "", "overridden duplicate is not displayed for its old action");
 assert(warnings.length === 0, "case-insensitive valid entries do not warn");
 
 parsed = context.parse("ctrl+shift+c:copy-password", () => {});
 assert(parsed.bindings["ctrl+shift+c"] === "copy-password", "valid custom chord is added");
-assert(parsed.preferred["copy-password"] === "ctrl+shift+c", "custom chord is preferred in labels");
-assert(context.display("ctrl+shift+c") === "Ctrl+Shift+C", "shortcut display is readable");
+assert(parsed.preferred === undefined, "parse returns bindings only");
+assert(context.display === undefined, "chord display machinery is gone");
 
 process.stdout.write("keybind parser tests passed\n");

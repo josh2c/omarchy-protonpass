@@ -9,15 +9,6 @@ var DEFAULT_BINDINGS = {
     "ctrl+shift+x": "clear-clipboard"
 };
 
-var DEFAULT_PREFERRED = {
-    "copy-username": "ctrl+u",
-    "copy-password": "ctrl+p",
-    "copy-totp": "ctrl+t",
-    "refresh": "ctrl+r",
-    "lock": "ctrl+l",
-    "clear-clipboard": "ctrl+shift+x"
-};
-
 var ACTIONS = [
     "copy-username",
     "copy-password",
@@ -36,19 +27,8 @@ function copyObject(source) {
     return result;
 }
 
-function firstChordForAction(bindings, action) {
-    var chords = Object.keys(bindings);
-    for (var i = 0; i < chords.length; i++) {
-        if (bindings[chords[i]] === action)
-            return chords[i];
-    }
-    return "";
-}
-
 function parse(raw, warn) {
     var bindings = copyObject(DEFAULT_BINDINGS);
-    var preferred = copyObject(DEFAULT_PREFERRED);
-    var customPreferred = {};
     var text = String(raw === undefined || raw === null ? "" : raw);
     if (text.trim() !== "") {
         var entries = text.split(",");
@@ -64,31 +44,8 @@ function parse(raw, warn) {
                 continue;
             }
             bindings[chord] = action;
-            customPreferred[action] = chord;
         }
     }
 
-    for (var actionIndex = 0; actionIndex < ACTIONS.length; actionIndex++) {
-        var actionName = ACTIONS[actionIndex];
-        var customChord = customPreferred[actionName] || "";
-        var defaultChord = preferred[actionName] || "";
-        if (customChord !== "" && bindings[customChord] === actionName)
-            preferred[actionName] = customChord;
-        else if (defaultChord === "" || bindings[defaultChord] !== actionName)
-            preferred[actionName] = firstChordForAction(bindings, actionName);
-    }
-
-    return {bindings: bindings, preferred: preferred};
-}
-
-function display(chord) {
-    if (!chord)
-        return "";
-    return String(chord).split("+").map(function(part) {
-        if (part === "ctrl") return "Ctrl";
-        if (part === "shift") return "Shift";
-        if (part === "alt") return "Alt";
-        if (part === "enter") return "Enter";
-        return part.toUpperCase();
-    }).join("+");
+    return {bindings: bindings};
 }
