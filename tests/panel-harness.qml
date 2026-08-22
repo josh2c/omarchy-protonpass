@@ -59,22 +59,31 @@ ShellRoot {
       svc.state = "ERROR"; svc.message = "Something went wrong" }},
     {label: "READY_EMPTY", setup: function(svc) { svc.state = "READY" }},
     {label: "READY_ITEMS", setup: function(svc) {
-      svc.state = "READY"; svc.items = harness.sampleItems }},
+      svc.state = "READY"; svc.items = harness.sampleItems },
+     ready: function(svc) { return svc.allRows.length === harness.sampleItems.length
+       && !svc.displayingRecents }},
     {label: "READY_RECENTS", setup: function(svc) {
       svc.state = "READY"; svc.items = harness.sampleItems
-      svc.recents = harness.sampleRecents() }},
+      svc.recents = harness.sampleRecents() },
+     ready: function(svc) { return svc.displayingRecents && svc.recentRows.length > 0 }},
     {label: "READY_NO_MATCHES", setup: function(svc) {
-      svc.state = "READY"; svc.items = harness.sampleItems; svc.query = "zzz" }},
+      svc.state = "READY"; svc.items = harness.sampleItems; svc.query = "zzz" },
+     ready: function(svc) { return svc.filteredItems.length === 0 }},
     {label: "READY_COPY_PENDING", setup: function(svc) {
       svc.state = "READY"; svc.items = harness.sampleItems
       harness.panelRoot.copyPendingKey = "password@item_b"
       harness.panelRoot.showPendingToast("Copying…") }},
+    // Toasts dismiss themselves after three seconds, which is shorter than a
+    // slow settle. Re-assert them each tick so the capture cannot race the
+    // dismissal timer.
     {label: "READY_TOAST", setup: function(svc) {
       svc.state = "READY"; svc.items = harness.sampleItems
-      harness.panelRoot.showToast("Copied password") }},
+      harness.panelRoot.showToast("Copied password") },
+     sustain: function() { harness.panelRoot.showToast("Copied password") }},
     {label: "READY_CREATED_TOAST", setup: function(svc) {
       svc.state = "READY"; svc.items = harness.sampleItems
-      harness.panelRoot.showCreatedToast("share_a", "item_a") }},
+      harness.panelRoot.showCreatedToast("share_a", "item_a") },
+     sustain: function() { harness.panelRoot.showCreatedToast("share_a", "item_a") }},
     {label: "READY_WARNING", setup: function(svc) {
       svc.state = "READY"; svc.items = harness.sampleItems
       svc.warnings = ["one vault failed"]; svc.message = "Some vaults could not be read" }}
@@ -82,6 +91,7 @@ ShellRoot {
   property int stateIndex: -1
   property int attempt: 0
   property var settledLines: null
+  property int stableCount: 0
   property var panelRoot: null
   property var keyboardPanel: null
   property var service: null
@@ -299,6 +309,7 @@ ShellRoot {
     reset()
     scenarios[stateIndex].setup(harness.service)
     settledLines = null
+    stableCount = 0
     attempt = 0
     stepTimer.restart()
   }
@@ -308,21 +319,43 @@ ShellRoot {
   // the harness, and injecting items re-lays out the list over several frames.
   // So capture repeatedly and only accept a tree that reads identically twice
   // in a row -- a settled layout -- rather than trusting a fixed delay.
+  function scenarioReady() {
+    var check = scenarios[stateIndex].ready
+    return check === undefined || check(harness.service)
+  }
+
   function tick() {
+    var sustain = scenarios[stateIndex].sustain
+    if (sustain !== undefined) sustain()
     var lines = captureLines()
     attempt++
     if (lines === null) {
       if (!panelRoot.opened) panelRoot.open()
       settledLines = null
+      stableCount = 0
+    } else if (!scenarioReady()) {
+      // A stable tree is not necessarily the right tree: without this, a
+      // scenario can be captured before its own precondition holds and the
+      // result looks settled because nothing is changing yet.
+      settledLines = null
+      stableCount = 0
     } else if (sameLines(settledLines, lines)) {
-      emitLines(scenarios[stateIndex].label, lines)
-      advance()
-      return
+      stableCount++
+      // Two matching reads are not enough: a list mid-relayout holds still for
+      // longer than one interval, and a scenario was captured with the previous
+      // scenario's rows stacked at the same y. Require several matches and a
+      // minimum settling time before believing the tree.
+      if (stableCount >= 3 && attempt >= 6) {
+        emitLines(scenarios[stateIndex].label, lines)
+        advance()
+        return
+      }
     } else {
       settledLines = lines
+      stableCount = 0
     }
 
-    if (attempt >= 40) {
+    if (attempt >= 60) {
       console.log("SNAPSHOT " + scenarios[stateIndex].label + " EMPTY")
       advance()
       return

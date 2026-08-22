@@ -31,8 +31,12 @@ Item {
     readonly property bool showRecents: boolSetting("showRecents", true)
     readonly property var recentItems: joinRecents(items, recents)
     readonly property bool displayingRecents: showRecents && query === "" && recentItems.length > 0
-    readonly property var recentRows: displayingRecents ? displayRows(recentItems, 0) : []
-    readonly property var allRows: displayRows(filteredItems, recentRows.length)
+    // Rows are the item objects themselves. Nothing is precomputed into them:
+    // the subtitle and the cursor index are derived in the delegate, so typing
+    // only re-filters instead of rebuilding a parallel array of row objects and
+    // re-running the date maths for every item on every keystroke.
+    readonly property var recentRows: displayingRecents ? recentItems : []
+    readonly property var allRows: filteredItems
     readonly property var displayItems: recentRows.concat(allRows)
     readonly property bool hasIndex: _hasIndex
     property var recents: []
@@ -43,16 +47,8 @@ Item {
     property int _indexGeneration: 0
     property int _activeIndexGeneration: 0
     property bool _indexPending: false
-    property string _doctorStdout: ""
-    property string _indexStdout: ""
-    property string _copyStdout: ""
-    property string _clearClipboardStdout: ""
-    property string _lockStdout: ""
-    property string _recentsStdout: ""
     property string _recentsOperation: ""
     property string _pendingRecentsOperation: ""
-    property string _logoutStdout: ""
-    property string _createStdout: ""
     property string _createInput: ""
 
     signal toastRequested(string message)
@@ -167,22 +163,6 @@ Item {
 
     function refreshSubtitleNow() {
         subtitleNow = Date.now();
-    }
-
-    function displayRows(source, offset) {
-        var rows = [];
-        for (var i = 0; i < source.length; i++) {
-            rows.push({
-                itemId: source[i].itemId,
-                shareId: source[i].shareId,
-                vaultName: source[i].vaultName,
-                title: source[i].title,
-                createTime: source[i].createTime,
-                subtitle: subtitleFor(source[i]),
-                cursorIndex: offset + i
-            });
-        }
-        return rows;
     }
 
     function _isObject(value) {
@@ -301,6 +281,32 @@ Item {
         return data;
     }
 
+    // Shared epilogue for every helper command. Returns a validated response, or
+    // null when the command is already finished -- it failed, or it was an
+    // auth/dependency transition that owns the outcome by itself. Each onExited
+    // keeps only its own tail.
+    //
+    // The index's generation fencing deliberately stays outside this: it has to
+    // decide whether a response is relevant at all before anything here touches
+    // shared state. Recents stays outside too, because it is fail-soft by
+    // design and must not raise a program error.
+    function _finish(exitCode, raw, commandName, failureToast) {
+        var response = _validatedResponse(String(raw), commandName);
+        if (exitCode !== 0 || response === null) {
+            _programError();
+            if (failureToast !== undefined && panelOpen)
+                toastRequested(failureToast);
+            return null;
+        }
+        if (response.state === "cli-missing") {
+            _missingDependency(response.message);
+            return null;
+        }
+        if (_authTransition(response.state, response.message))
+            return null;
+        return response;
+    }
+
     function _programError() {
         state = "ERROR";
         message = "Something went wrong talking to pass-cli";
@@ -352,7 +358,6 @@ Item {
         _doctorContinueIndex = _doctorContinueIndex || continueWithIndex;
         if (doctorProcess.running)
             return;
-        _doctorStdout = "";
         doctorProcess.command = [helperPath(), "doctor"];
         doctorProcess.running = true;
     }
@@ -362,7 +367,6 @@ Item {
             return;
         _indexPending = false;
         _activeIndexGeneration = _indexGeneration;
-        _indexStdout = "";
         indexProcess.command = [helperPath(), "index", "--exclude-vaults", String(setting("excludeVaults", ""))];
         indexProcess.running = true;
     }
@@ -447,7 +451,6 @@ Item {
         if (boolSetting("pasteOnce", false))
             commandLine.push("--paste-once");
 
-        _copyStdout = "";
         copyProcess.command = commandLine;
         copyBusy = true;
         copyProcess.running = true;
@@ -488,7 +491,6 @@ Item {
         var body = { title: title };
         body[identifierField] = identifier;
         _createInput = JSON.stringify(body);
-        _createStdout = "";
         createProcess.command = [helperPath(), "create", "--share-id", share];
         createBusy = true;
         createProcess.running = true;
@@ -512,7 +514,6 @@ Item {
     function clearClipboard() {
         if (clearClipboardProcess.running)
             return false;
-        _clearClipboardStdout = "";
         clearClipboardProcess.command = [helperPath(), "clear-now"];
         clearClipboardBusy = true;
         clearClipboardProcess.running = true;
@@ -522,7 +523,6 @@ Item {
     function lock() {
         if (lockProcess.running)
             return false;
-        _lockStdout = "";
         lockProcess.command = [helperPath(), "lock"];
         lockProcess.running = true;
         return true;
@@ -536,7 +536,6 @@ Item {
             return true;
         }
         _recentsOperation = operation;
-        _recentsStdout = "";
         recentsProcess.command = [helperPath(), "recents", operation];
         recentsProcess.running = true;
         return true;
@@ -555,7 +554,6 @@ Item {
     function logout() {
         if (logoutProcess.running)
             return false;
-        _logoutStdout = "";
         logoutProcess.command = [helperPath(), "logout"];
         logoutBusy = true;
         logoutProcess.running = true;
@@ -581,6 +579,16 @@ Item {
 
     onItemsChanged: refreshSubtitleNow()
     onRecentsChanged: refreshSubtitleNow()
+
+    // The one clock in the plugin. Row subtitles and the panel header's
+    // synced-age text both read subtitleNow, so they cannot drift apart, and
+    // nothing ticks while the panel is closed.
+    Timer {
+        interval: 30000
+        repeat: true
+        running: root.panelOpen && root.state === "READY"
+        onTriggered: root.refreshSubtitleNow()
+    }
 
     Timer {
         id: clipboardCountdownTimer
@@ -609,10 +617,9 @@ Item {
         onExited: function(exitCode) {
             var shouldIndex = root._doctorContinueIndex;
             root._doctorContinueIndex = false;
-            var response = root._validatedResponse(String(doctorOutput.text || root._doctorStdout || ""), "doctor");
-            if (exitCode !== 0 || response === null) {
+            var response = root._finish(exitCode, doctorOutput.text, "doctor");
+            if (response === null) {
                 root._doctorReady = false;
-                root._programError();
                 return;
             }
             if (response.state === "missing-deps") {
@@ -630,7 +637,6 @@ Item {
         stdout: StdioCollector {
             id: doctorOutput
             waitForEnd: true
-            onStreamFinished: root._doctorStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }
@@ -649,9 +655,9 @@ Item {
             }
 
             root.refreshing = false;
-            var response = root._validatedResponse(String(indexOutput.text || root._indexStdout || ""), "index");
-            if (exitCode !== 0 || response === null) {
-                root._programError();
+            var response = root._finish(exitCode, indexOutput.text, "index");
+            if (response === null) {
+                // Failed, or an auth/cli-missing transition already handled it.
             } else if (response.state === "ready") {
                 var cleanItems = [];
                 var cleanVaults = [];
@@ -678,9 +684,6 @@ Item {
                 root.state = "READY";
                 root.message = response.message;
                 root.staleWarning = false;
-            } else if (root._authTransition(response.state, response.message)) {
-            } else if (response.state === "cli-missing") {
-                root._missingDependency(response.message);
             } else if (root._hasIndex && (response.state === "unreachable" || response.state === "error")) {
                 root.state = "READY";
                 root.message = response.message;
@@ -694,7 +697,6 @@ Item {
         stdout: StdioCollector {
             id: indexOutput
             waitForEnd: true
-            onStreamFinished: root._indexStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }
@@ -705,19 +707,10 @@ Item {
         command: []
         onExited: function(exitCode) {
             root.copyBusy = false;
-            var response = root._validatedResponse(String(copyOutput.text || root._copyStdout || ""), "copy");
-            if (exitCode !== 0 || response === null) {
-                root._programError();
-                if (root.panelOpen)
-                    root.toastRequested("Copy failed — check connection and try again");
+            var response = root._finish(exitCode, copyOutput.text, "copy",
+                "Copy failed — check connection and try again");
+            if (response === null)
                 return;
-            }
-            if (root._authTransition(response.state, response.message))
-                return;
-            if (response.state === "cli-missing") {
-                root._missingDependency(response.message);
-                return;
-            }
             if (response.state === "copied")
                 root._startClipboardCountdown(response.clearSeconds);
             if (root.panelOpen)
@@ -728,7 +721,6 @@ Item {
         stdout: StdioCollector {
             id: copyOutput
             waitForEnd: true
-            onStreamFinished: root._copyStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }
@@ -748,19 +740,10 @@ Item {
         onExited: function(exitCode) {
             root.createBusy = false;
             root._createInput = "";
-            var response = root._validatedResponse(String(createOutput.text || root._createStdout || ""), "create");
-            if (exitCode !== 0 || response === null) {
-                root._programError();
-                if (root.panelOpen)
-                    root.toastRequested("Could not create login");
+            var response = root._finish(exitCode, createOutput.text, "create",
+                "Could not create login");
+            if (response === null)
                 return;
-            }
-            if (root._authTransition(response.state, response.message))
-                return;
-            if (response.state === "cli-missing") {
-                root._missingDependency(response.message);
-                return;
-            }
             if (response.state === "created") {
                 if (root.panelOpen) {
                     root.loginCreated(response.shareId, response.itemId);
@@ -775,7 +758,6 @@ Item {
         stdout: StdioCollector {
             id: createOutput
             waitForEnd: true
-            onStreamFinished: root._createStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }
@@ -786,12 +768,9 @@ Item {
         command: []
         onExited: function(exitCode) {
             root.clearClipboardBusy = false;
-            var response = root._validatedResponse(
-                String(clearClipboardOutput.text || root._clearClipboardStdout || ""), "clear-now");
-            if (exitCode !== 0 || response === null) {
-                root._programError();
+            var response = root._finish(exitCode, clearClipboardOutput.text, "clear-now");
+            if (response === null)
                 return;
-            }
             if (response.state === "cleared" || response.state === "not-owner") {
                 root._hideClipboardCountdown();
                 if (response.state === "cleared" && root.panelOpen)
@@ -803,7 +782,6 @@ Item {
         stdout: StdioCollector {
             id: clearClipboardOutput
             waitForEnd: true
-            onStreamFinished: root._clearClipboardStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }
@@ -813,19 +791,12 @@ Item {
         running: false
         command: []
         onExited: function(exitCode) {
-            var response = root._validatedResponse(String(lockOutput.text || root._lockStdout || ""), "lock");
-            if (exitCode !== 0 || response === null) {
-                root._programError();
+            // "locked" is an auth transition, so _finish has already cleared the
+            // index and entered LOCKED by the time this returns null.
+            var response = root._finish(exitCode, lockOutput.text, "lock");
+            if (response === null)
                 return;
-            }
-            if (response.state === "locked") {
-                root._clearIndex();
-                root.state = "LOCKED";
-                root.message = response.message;
-            } else if (root._authTransition(response.state, response.message)) {
-            } else if (response.state === "cli-missing") {
-                root._missingDependency(response.message);
-            } else if (response.state === "no-lock") {
+            if (response.state === "no-lock") {
                 if (root.panelOpen)
                     root.toastRequested("No session lock configured — run pass-cli session create-lock");
             } else if (root.panelOpen) {
@@ -835,7 +806,6 @@ Item {
         stdout: StdioCollector {
             id: lockOutput
             waitForEnd: true
-            onStreamFinished: root._lockStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }
@@ -846,7 +816,9 @@ Item {
         command: []
         onExited: function(exitCode) {
             var operation = root._recentsOperation;
-            var response = root._validatedResponse(String(recentsOutput.text || root._recentsStdout || ""), "recents");
+            // Deliberately not _finish: a failed recents read is ignored, never
+            // escalated to a program error.
+            var response = root._validatedResponse(String(recentsOutput.text), "recents");
             if (exitCode === 0 && response !== null && response.state === "ok") {
                 if (operation === "load" && Array.isArray(response.recents) && root.showRecents)
                     root.recents = response.recents.slice(0, 8);
@@ -861,7 +833,6 @@ Item {
         stdout: StdioCollector {
             id: recentsOutput
             waitForEnd: true
-            onStreamFinished: root._recentsStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }
@@ -872,17 +843,13 @@ Item {
         command: []
         onExited: function(exitCode) {
             root.logoutBusy = false;
-            var response = root._validatedResponse(String(logoutOutput.text || root._logoutStdout || ""), "logout");
-            if (exitCode !== 0 || response === null) {
-                root._programError();
+            var response = root._finish(exitCode, logoutOutput.text, "logout");
+            if (response === null)
                 return;
-            }
             if (response.state === "logged-out-ok") {
                 root._clearIndex();
                 root.state = "LOGGED_OUT";
                 root.message = response.message;
-            } else if (response.state === "cli-missing") {
-                root._missingDependency(response.message);
             } else if (root.panelOpen) {
                 root.toastRequested("Could not log out — check connection and try again");
             }
@@ -890,7 +857,6 @@ Item {
         stdout: StdioCollector {
             id: logoutOutput
             waitForEnd: true
-            onStreamFinished: root._logoutStdout = text
         }
         stderr: StdioCollector { waitForEnd: true }
     }

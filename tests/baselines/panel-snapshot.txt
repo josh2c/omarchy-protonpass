@@ -1,0 +1,407 @@
+HARNESS-WIRED kbPanel=true service=true
+SNAPSHOT-BEGIN INIT
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=360.61x14 text="CHECKING PASS-CLI…" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x80 text="Checking Proton Pass CLI…" color=#949494 px=12 bold=false align=4 wrap=0
+| QQuickRectangle at=390,49 size=6x76 fill=#383838
+SNAPSHOT-END INIT
+SNAPSHOT-BEGIN LOADING
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=360.61x14 text="CHECKING PASS-CLI…" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x80 text="Loading Proton Pass logins…" color=#949494 px=12 bold=false align=4 wrap=0
+| QQuickRectangle at=390,49 size=6x76 fill=#383838
+SNAPSHOT-END LOADING
+SNAPSHOT-BEGIN MISSING_DEPS
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=360.61x14 text="PROTON PASS CLI NOT FOUND" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x32 text="Proton Pass CLI not found or wl-clipboard is unavailable" color=#ff5555 px=12 bold=true align=4 wrap=1
+| QQuickText at=0,89 size=398x16 text="Proton Pass CLI not found" color=#ff5555 px=12 bold=false align=4 wrap=1
+| QQuickText at=0,115 size=398x30 text="Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible." color=#949494 px=11 bold=false align=4 wrap=1
+| BorderSurface at=0,155 size=398x46 fill=#ffffff
+| QQuickText at=9,164 size=350x28 text="curl -fsSL https://proton.me/download/pass-cli/install.sh | bash" color=#e6e6e6 px=10 bold=false align=1 wrap=3
+| PanelActionButton at=368,167 size=22x22 icon="" fill=#00000000 a11y="Copy official installer command"
+| QQuickText at=373,168 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| BorderSurface at=0,211 size=398x32 fill=#ffffff
+| QQuickText at=9,220 size=350x14 text="yay -S proton-pass-cli-bin" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=368,216 size=22x22 icon="" fill=#00000000 a11y="Copy Arch AUR command"
+| QQuickText at=373,217 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| QQuickText at=0,253 size=398x28 text="Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin." color=#949494 px=10 bold=false align=1 wrap=1
+| BorderSurface at=0,291 size=398x32 fill=#ffffff
+| QQuickText at=9,300 size=350x14 text="sudo pacman -S wl-clipboard" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=368,296 size=22x22 icon="" fill=#00000000 a11y="Copy wl-clipboard install command"
+| QQuickText at=373,297 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=163,333 size=72.31x30 text="Recheck" fill=#00000000
+| QQuickText at=174,340 size=50.31x16 text="Recheck" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x312 fill=#383838
+SNAPSHOT-END MISSING_DEPS
+SNAPSHOT-BEGIN LOGGED_OUT
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=360.61x14 text="SIGNED OUT — SIGN IN AGAIN" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x16 text="Signed out — sign in again" color=#ff5555 px=12 bold=false align=4 wrap=1
+| QQuickText at=0,73 size=398x45 text="Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise." color=#949494 px=11 bold=false align=4 wrap=1
+| Button at=130,128 size=72.31x30 text="Sign in" fill=#00000000
+| QQuickText at=141,135 size=50.31x16 text="Sign in" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| Button at=210.31,128 size=57.94x30 text="Retry" fill=#00000000
+| QQuickText at=221.31,135 size=35.94x16 text="Retry" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x107 fill=#383838
+SNAPSHOT-END LOGGED_OUT
+SNAPSHOT-BEGIN LOCKED
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=360.61x14 text="SESSION LOCKED — UNLOCK TO CONTINUE" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x16 text="Session locked — unlock to continue" color=#ff5555 px=12 bold=false align=4 wrap=0
+| Button at=133,73 size=65.13x30 text="Unlock" fill=#00000000
+| QQuickText at=144,80 size=43.13x16 text="Unlock" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| Button at=206.13,73 size=57.94x30 text="Retry" fill=#00000000
+| QQuickText at=217.13,80 size=35.94x16 text="Retry" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x52 fill=#383838
+SNAPSHOT-END LOCKED
+SNAPSHOT-BEGIN UNREACHABLE
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=360.61x14 text="COULD NOT REACH PROTON — CHECK YOUR CONNECTION" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x16 text="Could not reach Proton — check your connection" color=#ff5555 px=12 bold=false align=4 wrap=1
+| Button at=170,73 size=57.94x30 text="Retry" fill=#00000000
+| QQuickText at=181,80 size=35.94x16 text="Retry" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x52 fill=#383838
+SNAPSHOT-END UNREACHABLE
+SNAPSHOT-BEGIN ERROR
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=360.61x14 text="SOMETHING WENT WRONG" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x16 text="Something went wrong" color=#ff5555 px=12 bold=false align=4 wrap=1
+| Button at=170,73 size=57.94x30 text="Retry" fill=#00000000
+| QQuickText at=181,80 size=35.94x16 text="Retry" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x52 fill=#383838
+SNAPSHOT-END ERROR
+SNAPSHOT-BEGIN READY_EMPTY
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=212.61x14 text="0 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
+| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
+| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
+| BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
+| QQuickText at=0,91 size=398x72 text="No login items found" color=#949494 px=12 bold=false align=4 wrap=1
+| QQuickRectangle at=390,93 size=6x68 fill=#383838
+| QQuickRectangle at=390,49 size=6x112 fill=#383838
+SNAPSHOT-END READY_EMPTY
+SNAPSHOT-BEGIN READY_ITEMS
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
+| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
+| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
+| BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
+| PanelSectionHeader at=0,91 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=10,118 size=302x16 text="Alpha Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,136 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,153 size=302x14 text="created 1/5/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,132 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,133 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,132 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,133 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,132 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,133 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,185 size=302x16 text="Beta Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,203 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,220 size=302x14 text="created 2/11/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,199 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,200 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,199 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,200 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,199 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,200 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,252 size=302x16 text="Gamma Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,270 size=302x15 text="Work" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,287 size=302x14 text="created 3/19/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,266 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,267 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,266 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,267 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,266 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,267 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickRectangle at=390,93 size=6x213 fill=#383838
+| QQuickRectangle at=390,49 size=6x257 fill=#383838
+SNAPSHOT-END READY_ITEMS
+SNAPSHOT-BEGIN READY_RECENTS
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
+| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
+| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
+| BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
+| PanelSectionHeader at=0,91 size=398x22 text="Recent" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=10,124 size=302x16 text="Gamma Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,142 size=302x15 text="Work" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,159 size=302x14 text="used 2 hours ago" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,138 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,139 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,138 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,139 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,138 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,139 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelSectionHeader at=0,184 size=398x22 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=10,217 size=302x16 text="Alpha Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,235 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,252 size=302x14 text="created 1/5/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,231 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,232 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,231 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,232 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,231 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,232 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,284 size=302x16 text="Beta Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,302 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,319 size=302x14 text="created 2/11/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,298 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,299 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,298 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,299 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,298 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,299 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,351 size=302x16 text="Gamma Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,369 size=302x15 text="Work" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,386 size=302x14 text="used 2 hours ago" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,365 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,366 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,365 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,366 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,365 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,366 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickRectangle at=390,93 size=6x281.01 fill=#383838
+| QQuickRectangle at=390,49 size=6x340 fill=#383838
+SNAPSHOT-END READY_RECENTS
+SNAPSHOT-BEGIN READY_NO_MATCHES
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
+| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
+| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
+| BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
+| QQuickText at=0,91 size=398x72 text="No matches" color=#949494 px=12 bold=false align=4 wrap=0
+| QQuickRectangle at=390,93 size=6x68 fill=#383838
+| QQuickRectangle at=390,49 size=6x112 fill=#383838
+SNAPSHOT-END READY_NO_MATCHES
+SNAPSHOT-BEGIN READY_COPY_PENDING
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
+| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
+| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
+| BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
+| PanelSectionHeader at=0,91 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=10,118 size=302x16 text="Alpha Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,136 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,153 size=302x14 text="created 1/5/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,132 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,133 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,132 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,133 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,132 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,133 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,185 size=302x16 text="Beta Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,203 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,220 size=302x14 text="created 2/11/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,199 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,200 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,199 size=22x22 icon="󰔟" fill=#00000000 a11y="Copying password…"
+| QQuickText at=351,200 size=8.39x19 text="󰔟" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,199 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,200 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,252 size=302x16 text="Gamma Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,270 size=302x15 text="Work" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,287 size=302x14 text="created 3/19/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,266 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,267 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,266 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,267 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,266 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,267 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickRectangle at=390,93 size=6x213 fill=#383838
+| BorderSurface at=0,320 size=398x33 fill=#14e6e6e6 a11y="Copying…"
+| QQuickText at=10,329 size=378x15 text="Copying…" color=#e6e6e6 px=11 bold=false align=4 wrap=1
+| QQuickRectangle at=390,49 size=6x302 fill=#383838
+SNAPSHOT-END READY_COPY_PENDING
+SNAPSHOT-BEGIN READY_TOAST
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
+| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
+| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
+| BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
+| PanelSectionHeader at=0,91 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=10,118 size=302x16 text="Alpha Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,136 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,153 size=302x14 text="created 1/5/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,132 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,133 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,132 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,133 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,132 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,133 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,185 size=302x16 text="Beta Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,203 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,220 size=302x14 text="created 2/11/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,199 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,200 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,199 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,200 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,199 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,200 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,252 size=302x16 text="Gamma Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,270 size=302x15 text="Work" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,287 size=302x14 text="created 3/19/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,266 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,267 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,266 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,267 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,266 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,267 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickRectangle at=390,93 size=6x213 fill=#383838
+| BorderSurface at=0,320 size=398x33 fill=#14e6e6e6 a11y="Copied password"
+| QQuickText at=10,329 size=378x15 text="Copied password" color=#e6e6e6 px=11 bold=false align=4 wrap=1
+| QQuickRectangle at=390,49 size=6x302 fill=#383838
+SNAPSHOT-END READY_TOAST
+SNAPSHOT-BEGIN READY_CREATED_TOAST
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
+| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
+| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
+| BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
+| PanelSectionHeader at=0,91 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=10,118 size=302x16 text="Alpha Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,136 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,153 size=302x14 text="created 1/5/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,132 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,133 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,132 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,133 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,132 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,133 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,185 size=302x16 text="Beta Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,203 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,220 size=302x14 text="created 2/11/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,199 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,200 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,199 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,200 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,199 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,200 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,252 size=302x16 text="Gamma Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,270 size=302x15 text="Work" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,287 size=302x14 text="created 3/19/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,266 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,267 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,266 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,267 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,266 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,267 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickRectangle at=390,93 size=6x213 fill=#383838
+| BorderSurface at=0,320 size=398x46 fill=#14e6e6e6 a11y="Login created"
+| QQuickText at=10,335 size=270x15 text="Login created" color=#e6e6e6 px=11 bold=false align=1 wrap=1
+| Button at=288,329 size=100x28 text="Copy password" fill=#00000000 a11y="Copy password for created login"
+| QQuickText at=299,336 size=78x14 text="Copy password" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x315 fill=#383838
+SNAPSHOT-END READY_CREATED_TOAST
+SNAPSHOT-BEGIN READY_WARNING
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
+| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
+| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
+| BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
+| BorderSurface at=0,91 size=398x33 fill=#14ff5555
+| QQuickText at=10,100 size=378x15 text="Some vaults could not be read" color=#ff5555 px=11 bold=false align=4 wrap=1
+| PanelSectionHeader at=0,136 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=10,163 size=302x16 text="Alpha Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,181 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,198 size=302x14 text="created 1/5/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,177 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,178 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,177 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,178 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,177 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,178 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,230 size=302x16 text="Beta Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,248 size=302x15 text="Personal" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,265 size=302x14 text="created 2/11/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,244 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,245 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,244 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,245 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,244 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,245 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickText at=10,297 size=302x16 text="Gamma Login" color=#e6e6e6 px=12 bold=true align=1 wrap=0
+| QQuickText at=10,315 size=302x15 text="Work" color=#949494 px=11 bold=false align=1 wrap=0
+| QQuickText at=10,332 size=302x14 text="created 3/19/26" color=#949494 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=320,311 size=22x22 icon="" fill=#00000000 a11y="Copy username"
+| QQuickText at=325,312 size=12.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=344,311 size=22x22 icon="" fill=#00000000 a11y="Copy password"
+| QQuickText at=348,312 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=368,311 size=22x22 icon="" fill=#00000000 a11y="Copy TOTP code"
+| QQuickText at=372,312 size=13.39x19 text="" color=#e6e6e6 px=14 bold=false align=1 wrap=0
+| QQuickRectangle at=390,138 size=6x213 fill=#383838
+| QQuickRectangle at=390,49 size=6x302 fill=#383838
+SNAPSHOT-END READY_WARNING
+HARNESS-DONE

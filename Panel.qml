@@ -27,7 +27,6 @@ Panel {
   // ends without a result toast.
   property string copyPendingKey: ""
   property string setupClipboardText: ""
-  property int statusTick: 0
   property bool logoutArmed: false
   property bool createFormOpen: false
   property string createVaultShareId: ""
@@ -313,9 +312,8 @@ Panel {
   }
 
   function syncedAgeText() {
-    statusTick
     if (svc.lastSuccessfulIndexAt <= 0) return "syncing"
-    var minutes = Math.max(0, Math.floor((Date.now() - svc.lastSuccessfulIndexAt) / 60000))
+    var minutes = Math.max(0, Math.floor((svc.subtitleNow - svc.lastSuccessfulIndexAt) / 60000))
     return "synced " + minutes + "m ago"
   }
 
@@ -487,13 +485,6 @@ Panel {
     interval: 3000
     repeat: false
     onTriggered: root.clearToast()
-  }
-
-  Timer {
-    interval: 30000
-    repeat: true
-    running: root.opened && svc.state === "READY"
-    onTriggered: root.statusTick++
   }
 
   Timer {
@@ -902,10 +893,21 @@ Panel {
               fontFamily: root.fontFamily
             }
 
-            Repeater {
-              id: recentRepeater
-              model: svc.recentRows
-              delegate: loginRowDelegate
+            // Each list lives in its own Column so a row can read the offset
+            // its section starts at -- a Repeater reparents delegates to its
+            // own parent, which makes that Column the row's parent.
+            Column {
+              id: recentSection
+              property int rowOffset: 0
+              visible: svc.recentRows.length > 0
+              width: parent.width
+              spacing: Style.space(4)
+
+              Repeater {
+                id: recentRepeater
+                model: svc.recentRows
+                delegate: loginRowDelegate
+              }
             }
 
             PanelSectionHeader {
@@ -924,10 +926,18 @@ Panel {
               fontFamily: root.fontFamily
             }
 
-            Repeater {
-              id: itemRepeater
-              model: svc.allRows
-              delegate: loginRowDelegate
+            Column {
+              id: allSection
+              property int rowOffset: svc.recentRows.length
+              visible: svc.allRows.length > 0
+              width: parent.width
+              spacing: Style.space(4)
+
+              Repeater {
+                id: itemRepeater
+                model: svc.allRows
+                delegate: loginRowDelegate
+              }
             }
 
               Component {
@@ -937,9 +947,12 @@ Panel {
                 id: loginRow
                 required property var modelData
                 required property int index
+                // Derived here rather than baked into the model, so filtering
+                // does not have to rebuild every row to renumber it.
+                readonly property int cursorIndex: loginRow.parent.rowOffset + loginRow.index
                 width: parent.width
                 implicitHeight: rowContent.implicitHeight + Style.space(14)
-                hasCursor: root.cursorActive && root.cursorIndex === modelData.cursorIndex
+                hasCursor: root.cursorActive && root.cursorIndex === loginRow.cursorIndex
                 foreground: root.foreground
 
                 MouseArea {
@@ -947,11 +960,11 @@ Panel {
                   hoverEnabled: true
                   onEntered: {
                     root.cursorActive = true
-                    root.cursorIndex = loginRow.modelData.cursorIndex
+                    root.cursorIndex = loginRow.cursorIndex
                   }
                   onClicked: {
                     root.cursorActive = true
-                    root.cursorIndex = loginRow.modelData.cursorIndex
+                    root.cursorIndex = loginRow.cursorIndex
                     keyCatcher.forceActiveFocus()
                   }
                 }
@@ -991,7 +1004,7 @@ Panel {
                     }
                     Text {
                       width: parent.width
-                      text: loginRow.modelData.subtitle
+                      text: svc.subtitleFor(loginRow.modelData)
                       textFormat: Text.PlainText
                       color: root.dim
                       font.family: root.fontFamily

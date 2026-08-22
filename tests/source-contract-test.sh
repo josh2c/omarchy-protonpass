@@ -105,7 +105,11 @@ assert_not_contains 'console.log(' \
   "Service.qml writes unreviewed data to logs"
 
 # --- User data is never interpreted as markup ---------------------------
-[[ $(grep -A1 -E 'text: loginRow\.modelData\.(title|vaultName|subtitle)' "$ROOT/Panel.qml" | grep -c 'textFormat: Text.PlainText') -eq 3 ]] || \
+# Row title, vault name and subtitle all render helper-supplied text. The
+# subtitle is computed in the delegate rather than carried on the row, so it is
+# matched by its binding rather than by a model property.
+[[ $(grep -A1 -E 'text: (loginRow\.modelData\.(title|vaultName)|svc\.subtitleFor\(loginRow\.modelData\))' "$ROOT/Panel.qml" \
+  | grep -c 'textFormat: Text.PlainText') -eq 3 ]] || \
   fail "every user-data render must use Text.PlainText"
 assert_panel_contains $'text: createVaultOption.modelData.name\n                      textFormat: Text.PlainText' \
   "create-form vault names are not forced to plain text"

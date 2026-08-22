@@ -1,0 +1,48 @@
+CASE u ctx=list helper="copy --share-id share_a --item-id item_a --field username --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="username@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE u ctx=search helper="" focus=search search="u" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE p ctx=list helper="copy --share-id share_a --item-id item_a --field password --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="password@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE p ctx=search helper="" focus=search search="p" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE t ctx=list helper="copy --share-id share_a --item-id item_a --field totp --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="totp@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE t ctx=search helper="" focus=search search="t" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE r ctx=list helper="index --exclude-vaults " focus=catcher search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE r ctx=search helper="" focus=search search="r" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE j ctx=list helper="" focus=catcher search="" cursor=on:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE j ctx=search helper="" focus=search search="j" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE k ctx=list helper="" focus=catcher search="" cursor=on:1 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE k ctx=search helper="" focus=search search="k" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE l ctx=list helper="" focus=search search="l" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE l ctx=search helper="" focus=search search="l" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE a ctx=list helper="" focus=search search="a" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE a ctx=search helper="" focus=search search="a" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE slash ctx=list helper="" focus=search search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE slash ctx=search helper="" focus=search search="/" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE shift+l ctx=list helper="lock" focus=catcher search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE shift+l ctx=search helper="" focus=search search="L" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE ctrl+u ctx=list helper="copy --share-id share_a --item-id item_a --field username --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="username@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE ctrl+u ctx=search helper="copy --share-id share_a --item-id item_a --field username --clear-seconds 45" focus=search search="" cursor=off:0 copy="username@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE ctrl+p ctx=list helper="copy --share-id share_a --item-id item_a --field password --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="password@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE ctrl+p ctx=search helper="copy --share-id share_a --item-id item_a --field password --clear-seconds 45" focus=search search="" cursor=off:0 copy="password@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE ctrl+t ctx=list helper="copy --share-id share_a --item-id item_a --field totp --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="totp@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE ctrl+t ctx=search helper="copy --share-id share_a --item-id item_a --field totp --clear-seconds 45" focus=search search="" cursor=off:0 copy="totp@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE ctrl+r ctx=list helper="index --exclude-vaults " focus=catcher search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE ctrl+r ctx=search helper="index --exclude-vaults " focus=search search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE ctrl+l ctx=list helper="lock" focus=catcher search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE ctrl+l ctx=search helper="lock" focus=search search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE ctrl+shift+x ctx=list helper="clear-now" focus=catcher search="" cursor=off:0 copy="" refreshing=false clearing=true logoutArmed=false createOpen=false opened=true toastPending=false
+CASE ctrl+shift+x ctx=search helper="clear-now" focus=search search="" cursor=off:0 copy="" refreshing=false clearing=true logoutArmed=false createOpen=false opened=true toastPending=false
+CASE enter ctx=list helper="copy --share-id share_a --item-id item_a --field password --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="password@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE enter ctx=search helper="copy --share-id share_a --item-id item_a --field password --clear-seconds 45" focus=search search="" cursor=off:0 copy="password@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE shift+enter ctx=list helper="copy --share-id share_a --item-id item_a --field username --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="username@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE shift+enter ctx=search helper="copy --share-id share_a --item-id item_a --field username --clear-seconds 45" focus=search search="" cursor=off:0 copy="username@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE ctrl+enter ctx=list helper="copy --share-id share_a --item-id item_a --field password --clear-seconds 45" focus=catcher search="" cursor=off:0 copy="password@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE ctrl+enter ctx=search helper="copy --share-id share_a --item-id item_a --field password --clear-seconds 45" focus=search search="" cursor=off:0 copy="password@item_a" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=true
+CASE escape ctx=list helper="" focus=other search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=false toastPending=false
+CASE escape ctx=search helper="" focus=other search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=false toastPending=false
+CASE tab ctx=list helper="" focus=search search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE tab ctx=search helper="" focus=catcher search="" cursor=on:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE backtab ctx=list helper="" focus=search search="" cursor=off:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE backtab ctx=search helper="" focus=catcher search="" cursor=on:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE up ctx=list helper="" focus=catcher search="" cursor=on:1 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE up ctx=search helper="" focus=search search="" cursor=on:1 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE down ctx=list helper="" focus=catcher search="" cursor=on:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false
+CASE down ctx=search helper="" focus=catcher search="" cursor=on:0 copy="" refreshing=false clearing=false logoutArmed=false createOpen=false opened=true toastPending=false

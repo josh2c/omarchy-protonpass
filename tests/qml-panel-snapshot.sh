@@ -7,6 +7,15 @@
 # Needs a live Wayland session -- KeyboardPanel is a layer-shell surface and
 # will not lay out under the offscreen platform. Skips cleanly without one.
 #
+#   tests/qml-panel-snapshot.sh after.txt
+#   git stash && tests/qml-panel-snapshot.sh before.txt && git stash pop
+#   diff before.txt after.txt
+#
+# tests/baselines/panel-snapshot.txt is the committed dump for the current
+# release. It records this machine's font metrics, so geometry will differ on a
+# host with different fonts -- compare two runs from one machine, and refresh
+# the baseline deliberately when a change is meant to alter rendering.
+#
 # Usage: tests/qml-panel-snapshot.sh [output-file]
 set -euo pipefail
 cd "$(dirname "$0")/.."
