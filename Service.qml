@@ -741,6 +741,9 @@ Item {
         onStarted: {
             write(root._createInput);
             root._createInput = "";
+            // Closing stdin is required: the helper reads the template with
+            // CREATE_INPUT=$(cat) and blocks forever without EOF.
+            createProcess.stdinEnabled = false;
         }
         onExited: function(exitCode) {
             root.createBusy = false;
