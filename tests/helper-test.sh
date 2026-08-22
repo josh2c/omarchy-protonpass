@@ -9,82 +9,10 @@ make_test_sandbox
 PASS_CLI="$TEST_BIN/pass-cli"
 FIXTURES="$TEST_ROOT/tests/fixtures"
 
-run_error_scenario() {
-  local scenario=$1 fixture=$2
-  local stdout_file="$TEST_SANDBOX/$scenario.stdout"
-  local stderr_file="$TEST_SANDBOX/$scenario.stderr"
-  local status
-  set +e
-  MOCK_SCENARIO=$scenario "$PASS_CLI" vault list --output json >"$stdout_file" 2>"$stderr_file"
-  status=$?
-  set -e
-  assert_eq "$(<"$FIXTURES/$fixture.exit")" "$status" "$scenario exit status"
-  assert_file_eq "$FIXTURES/$fixture.stderr" "$stderr_file" "$scenario stderr"
-  [[ ! -s $stdout_file ]] || fail "$scenario wrote stdout"
-}
-
-assert_eq "Proton Pass CLI 2.3.2 (mock)" "$($PASS_CLI --version)" "mock version"
-
-ready=$(MOCK_SCENARIO=ready "$PASS_CLI" vault list --output json)
-assert_jq 'type == "object" and (.vaults|type) == "array" and (.vaults[0]|keys|sort) == ["name","share_id","vault_id"]' "$ready" "ready vault-list shape"
-
-ready_items=$(MOCK_SCENARIO=ready "$PASS_CLI" item list --share-id share_fixture_1 --filter-type login --filter-state active --output json)
-assert_jq 'type == "object" and (.items|length) == 1 and (.items[0]|has("id") and has("share_id") and has("title") and has("item_type"))' "$ready_items" "ready item-list shape"
-
-"$PASS_CLI" item create login --get-template >"$TEST_SANDBOX/login-create-template.json"
-assert_file_eq "$FIXTURES/login-create-template.json" \
-  "$TEST_SANDBOX/login-create-template.json" "login create template shape"
-set +e
-"$PASS_CLI" item create login >"$TEST_SANDBOX/create-no-args.stdout" \
-  2>"$TEST_SANDBOX/create-no-args.stderr"
-create_no_args_status=$?
-set -e
-assert_eq "$(<"$FIXTURES/create-no-args.exit")" "$create_no_args_status" \
-  "non-interactive create exit status"
-assert_file_eq "$FIXTURES/create-no-args.stderr" \
-  "$TEST_SANDBOX/create-no-args.stderr" "non-interactive create stderr"
-[[ ! -s $TEST_SANDBOX/create-no-args.stdout ]] || fail "non-interactive create wrote stdout"
-
-multivault=$(MOCK_SCENARIO=ready-multivault "$PASS_CLI" vault list --output json)
-assert_jq '(.vaults|length) == 2' "$multivault" "multi-vault list"
-work_items=$(MOCK_SCENARIO=ready-multivault "$PASS_CLI" item list --share-id share_fixture_2 --filter-type login --filter-state active --output json)
-assert_jq '(.items|length) == 1 and .items[0].share_id == "share_fixture_2"' "$work_items" "multi-vault item routing"
-
-empty_items=$(MOCK_SCENARIO=empty-vault "$PASS_CLI" item list --share-id share_fixture_2 --filter-type login --filter-state active --output json)
-assert_jq '.items == []' "$empty_items" "empty vault"
-zero_vaults=$(MOCK_SCENARIO=zero-vaults "$PASS_CLI" vault list --output json)
-assert_jq '.vaults == []' "$zero_vaults" "zero vaults"
-
-run_error_scenario logged-out logged-out
-run_error_scenario locked locked
-run_error_scenario expired invalidated
-run_error_scenario offline network-down
-
-set +e
-MOCK_SCENARIO=no-lock "$PASS_CLI" session lock >"$TEST_SANDBOX/no-lock.stdout" 2>"$TEST_SANDBOX/no-lock.stderr"
-no_lock_status=$?
-set -e
-assert_eq "1" "$no_lock_status" "no-lock exit status"
-assert_file_eq "$FIXTURES/no-lock.stderr" "$TEST_SANDBOX/no-lock.stderr" "no-lock stderr"
-
-set +e
-MOCK_SCENARIO=no-totp "$PASS_CLI" item totp --share-id share_fixture_1 --item-id item_email_1 --output json >"$TEST_SANDBOX/no-totp.stdout" 2>"$TEST_SANDBOX/no-totp.stderr"
-no_totp_status=$?
-set -e
-assert_eq "1" "$no_totp_status" "no-totp exit status"
-assert_file_eq "$FIXTURES/no-totp.stderr" "$TEST_SANDBOX/no-totp.stderr" "no-totp stderr"
-
-for field in username email; do
-  set +e
-  MOCK_SCENARIO=no-username "$PASS_CLI" item view --share-id share_fixture_1 --item-id item_email_1 --field "$field" >"$TEST_SANDBOX/no-$field.stdout" 2>"$TEST_SANDBOX/no-$field.stderr"
-  field_status=$?
-  set -e
-  assert_eq "1" "$field_status" "missing $field exit status"
-  assert_file_eq "$FIXTURES/no-$field.stderr" "$TEST_SANDBOX/no-$field.stderr" "missing $field stderr"
-done
-
-malformed=$(MOCK_SCENARIO=malformed-json "$PASS_CLI" vault list --output json)
-if jq -e . <<<"$malformed" >/dev/null 2>&1; then fail "malformed-json scenario returned valid JSON"; fi
+# Harness self-tests. Everything else the mocks do is asserted through the
+# helper's own responses further down; these three properties are not
+# observable there: the mock must stay interruptible, must deliver hostile
+# metadata without executing it, and must never record clipboard content.
 
 set +e
 MOCK_SCENARIO=timeout-sleeps MOCK_SLEEP_SECONDS=1 timeout 0.02 "$PASS_CLI" vault list --output json >/dev/null
@@ -92,31 +20,14 @@ timeout_status=$?
 set -e
 assert_eq "124" "$timeout_status" "timeout-sleeps remains interruptible"
 
-trailing_hash=$(MOCK_SCENARIO=value-with-trailing-newlines "$PASS_CLI" item view --share-id share_fixture_1 --item-id item_username_1 --field password | sha256sum | cut -d' ' -f1)
-expected_trailing_hash=$(printf 'synthetic-value\n\n\n' | sha256sum | cut -d' ' -f1)
-assert_eq "$expected_trailing_hash" "$trailing_hash" "trailing-newline bytes"
-
 unicode_items=$(MOCK_SCENARIO=unicode-titles "$PASS_CLI" item list --share-id share_fixture_1 --filter-type login --filter-state active --output json)
 # shellcheck disable=SC2016
 assert_jq '(.items|length) == 5 and any(.items[]; .title == "Quote \"login\"") and any(.items[]; .title == "Line\nbreak") and any(.items[]; .title == "Emoji 🔐") and any(.items[]; .title == "RTL مثال") and any(.items[]; .title|contains("$(touch /tmp/never-run)"))' "$unicode_items" "unicode and metacharacter titles"
 [[ ! -e /tmp/never-run ]] || fail "shell metacharacters from a title were executed"
 
-set +e
-MOCK_SCENARIO=ready-multivault MOCK_FAIL_SHARE_ID=share_fixture_2 "$PASS_CLI" item list --share-id share_fixture_2 --output json >"$TEST_SANDBOX/partial.stdout" 2>"$TEST_SANDBOX/partial.stderr"
-partial_status=$?
-set -e
-assert_eq "1" "$partial_status" "per-vault failure exit status"
-assert_file_contains "$TEST_SANDBOX/partial.stderr" "Synthetic per-vault failure" "per-vault failure stderr"
-
 printf 'clipboard-marker' | "$TEST_BIN/wl-copy" --sensitive -o
 assert_jq '(.args == ["--sensitive","-o"]) and (.sha256|type == "string")' "$(tail -n1 "$MOCK_WL_COPY_LOG")" "wl-copy argv and hash log"
 if grep -Fq -- 'clipboard-marker' "$MOCK_WL_COPY_LOG"; then fail "wl-copy log contains clipboard content"; fi
-
-paste_value=$(MOCK_WL_PASTE_VALUE='configured paste value' "$TEST_BIN/wl-paste" --no-newline)
-assert_eq "configured paste value" "$paste_value" "wl-paste configured value"
-assert_jq '. == ["--no-newline"]' "$(tail -n1 "$MOCK_WL_PASTE_LOG")" "wl-paste argv log"
-
-assert_jq 'length > 0 and all(.[]; type == "array")' "$(jq -sc '.' "$MOCK_CALLS_LOG")" "pass-cli argv log is JSON arrays"
 
 HELPER="$TEST_ROOT/omarchy-protonpass"
 
@@ -405,17 +316,6 @@ assert_jq '.state == "error" and .items == [] and .warnings == [] and .vaults ==
 malformed_item_index=$(MOCK_SCENARIO=ready-multivault MOCK_MALFORMED_SHARE_ID=share_fixture_2 "$HELPER" index --exclude-vaults '')
 assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and (.warnings|length) == 1 and (.vaults|length) == 2' "$malformed_item_index" "malformed per-vault JSON"
 
-for scenario_state in 'logged-out:logged-out' 'expired:logged-out' 'locked:locked' 'offline:unreachable' 'timeout-sleeps:unreachable'; do
-  scenario=${scenario_state%%:*}
-  expected_state=${scenario_state#*:}
-  if [[ $scenario == timeout-sleeps ]]; then
-    classified_index=$(MOCK_SCENARIO=$scenario MOCK_TIMEOUT_EXIT=1 "$HELPER" index --exclude-vaults '')
-  else
-    classified_index=$(MOCK_SCENARIO=$scenario "$HELPER" index --exclude-vaults '')
-  fi
-  assert_jq ".state == \"$expected_state\" and .items == [] and .warnings == [] and .vaults == [] and (.message|type) == \"string\"" "$classified_index" "index state for $scenario"
-done
-
 expired_index=$(MOCK_SCENARIO=expired "$HELPER" index --exclude-vaults '')
 assert_jq '.message == "Session expired — sign in again" and (tostring|contains("non-existent session")|not)' "$expired_index" "index sanitizes revoked-session stderr"
 
@@ -598,19 +498,6 @@ empty_totp_copy=$(MOCK_SCENARIO=ready MOCK_TOTP_VARIANT=empty "$HELPER" copy \
 assert_jq '.state == "error" and (.message|contains("Copy failed"))' "$empty_totp_copy" "empty TOTP map"
 [[ ! -s $MOCK_WL_COPY_LOG ]] || fail "malformed TOTP copied to clipboard"
 
-for scenario_state in 'logged-out:logged-out' 'expired:logged-out' 'locked:locked' 'offline:unreachable' 'timeout-sleeps:unreachable'; do
-  scenario=${scenario_state%%:*}
-  expected_state=${scenario_state#*:}
-  if [[ $scenario == timeout-sleeps ]]; then
-    failed_copy=$(MOCK_SCENARIO=$scenario MOCK_TIMEOUT_EXIT=1 "$HELPER" copy \
-      --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0)
-  else
-    failed_copy=$(MOCK_SCENARIO=$scenario "$HELPER" copy \
-      --share-id share_fixture_1 --item-id item_fixture_1 --field password --clear-seconds 0)
-  fi
-  assert_jq ".state == \"$expected_state\" and .field == \"password\" and .fallbackUsed == false and .clearSeconds == 0" "$failed_copy" "copy state for $scenario"
-done
-
 : >"$MOCK_WL_COPY_LOG"
 wl_copy_failure=$(MOCK_SCENARIO=ready MOCK_WL_COPY_EXIT=1 "$HELPER" copy \
   --share-id share_fixture_1 --item-id item_fixture_1 \
@@ -713,11 +600,13 @@ missing_wl_paste_clear=$("$HELPER" clear-now)
 assert_jq '.state == "error"' "$missing_wl_paste_clear" "clear-now missing wl-paste"
 ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
 
+# Every command x scenario pair goes through here: the envelope contract, the
+# exit status, the silent stderr, and each command's payload for that state.
 run_shared_matrix_case() {
   local command_name=$1 scenario=$2 expected_state=$3
   local output_file="$TEST_SANDBOX/matrix-$command_name-$scenario.stdout"
   local stderr_file="$TEST_SANDBOX/matrix-$command_name-$scenario.stderr"
-  local status
+  local status payload='true'
   local -a args
 
   case "$command_name" in
@@ -738,9 +627,19 @@ run_shared_matrix_case() {
   status=$?
   set -e
 
+  # Payload the command must still carry in this state.
+  case "$command_name" in
+    index)
+      [[ $expected_state == ready ]] ||
+        payload='.items == [] and .warnings == [] and .vaults == []'
+      ;;
+    copy) payload='.field == "password" and .fallbackUsed == false and .clearSeconds == 0' ;;
+  esac
+
   assert_eq "0" "$status" "$command_name $scenario handled exit status"
   [[ ! -s $stderr_file ]] || fail "$command_name $scenario wrote stderr"
-  assert_jq ".schemaVersion == 1 and .command == \"$command_name\" and .state == \"$expected_state\"" \
+  assert_jq ".schemaVersion == 1 and .command == \"$command_name\" and .state == \"$expected_state\"
+    and (.message|type) == \"string\" and ($payload)" \
     "$(<"$output_file")" "$command_name $scenario matrix contract"
 }
 
