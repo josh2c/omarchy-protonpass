@@ -12,7 +12,7 @@ MARKER=OMPP-T7-MARKER-7f43d2a9
 security_sources=("$HELPER")
 while IFS= read -r qml_file; do
   security_sources+=("$qml_file")
-done < <(find "$ROOT" -maxdepth 1 -type f -name '*.qml' -print)
+done < <(find "$ROOT" -maxdepth 1 -type f \( -name '*.qml' -o -name '*.js' \) -print)
 
 fail_on_match() {
   local expression=$1 message=$2
