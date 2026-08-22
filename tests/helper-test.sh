@@ -313,6 +313,20 @@ unicode_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
 assert_jq 'all(.[]; (join(" ")|contains("Quote \"login\"")|not) and (join(" ")|contains("Emoji 🔐")|not) and (join(" ")|contains("$(touch /tmp/never-run)")|not))' "$unicode_calls" "item titles absent from argv"
 
 : >"$MOCK_CALLS_LOG"
+oversized_index=$(MOCK_SCENARIO=oversized-title "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and (.items|length) == 2 and .warnings == []' \
+  "$oversized_index" "an oversized title does not hide the rest of the vault"
+assert_jq '[.items[] | select(.itemId == "item_oversized") | .title]
+  == [("T" * 256)]' \
+  "$oversized_index" "oversized title truncated to the display limit"
+assert_jq '(.items[] | select(.itemId == "item_fixture_1") | .title) == "T0 Synthetic Login"' \
+  "$oversized_index" "normal title untouched"
+assert_jq 'all(.items[]; .vaultName == ("V" * 256))' \
+  "$oversized_index" "oversized vault name truncated to the display limit"
+assert_jq '.vaults == [{shareId:"share_fixture_1",name:("V" * 256)}]' \
+  "$oversized_index" "oversized vault name truncated in the vault contract"
+
+: >"$MOCK_CALLS_LOG"
 partial_index=$(MOCK_SCENARIO=ready-multivault MOCK_FAIL_SHARE_ID=share_fixture_2 "$HELPER" index --exclude-vaults '')
 assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == ["A vault could not be loaded"] and (.vaults|length) == 2 and (.message|contains("Some vaults"))' "$partial_index" "index partial failure"
 partial_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")

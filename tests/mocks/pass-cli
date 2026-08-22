@@ -63,6 +63,13 @@ emit_multivault_items() {
   esac
 }
 
+emit_oversized_items() {
+  jq -cn '{items:[
+    {id:"item_oversized",share_id:"share_fixture_1",vault_id:"vault_fixture_1",state:"Active",flags:[],create_time:"2026-08-20T22:46:00",modify_time:"2026-08-20T22:46:00",title:("T" * 900),item_type:"login"},
+    {id:"item_fixture_1",share_id:"share_fixture_1",vault_id:"vault_fixture_1",state:"Active",flags:[],create_time:"2026-08-20T22:44:15",modify_time:"2026-08-20T22:44:15",title:"T0 Synthetic Login",item_type:"login"}
+  ]}'
+}
+
 emit_unicode_items() {
   cat <<'JSON'
 {"items":[
@@ -112,6 +119,9 @@ if [[ ${1:-} == vault && ${2:-} == list ]]; then
     ready-multivault|empty-vault|zero-logins) emit_multivault_vaults ;;
     zero-vaults) jq -cn '{vaults:[]}' ;;
     malformed-vault-entry) jq -cn '{vaults:[{name:"",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
+    oversized-title)
+      jq -cn '{vaults:[{name:("V" * 700),vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}'
+      ;;
     *) emit_ready_vaults ;;
   esac
   exit 0
@@ -136,6 +146,7 @@ if [[ ${1:-} == item && ${2:-} == list ]]; then
       ;;
     zero-logins) emit_empty_items ;;
     zero-vaults) emit_empty_items ;;
+    oversized-title) emit_oversized_items ;;
     unicode-titles) emit_unicode_items ;;
     *) emit_ready_items ;;
   esac

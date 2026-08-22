@@ -11,6 +11,10 @@ readonly CLIP_HASH_BASENAME=omarchy-protonpass.clip
 readonly RECENTS_DIRNAME=omarchy-protonpass
 readonly RECENTS_BASENAME=recents.json
 readonly RECENTS_LIMIT=8
+# Titles and vault names come from whoever shared the vault and are otherwise
+# unbounded, so the index truncates them for display rather than rejecting the
+# item — one hostile entry must not hide the rest of a legitimate vault.
+readonly INDEX_DISPLAY_TEXT_LIMIT=256
 
 emit_doctor() {
   local state=$1 message=$2 pass_present=$3 version=$4 clipboard_present=$5
@@ -705,7 +709,8 @@ index_command() {
     ($excluded | split(",") | map(trim) | map(select(length > 0))) as $excludedNames
     | [.vaults[] | select(.name as $name | ($excludedNames | index($name) | not))]
   ' <<<"$vault_stdout")
-  contract_vaults=$(jq -c '[.[] | {shareId: .share_id, name: .name}]' <<<"$vaults")
+  contract_vaults=$(jq -c --argjson limit "$INDEX_DISPLAY_TEXT_LIMIT" \
+    '[.[] | {shareId: .share_id, name: (.name[0:$limit])}]' <<<"$vaults")
 
   while IFS= read -r vault_json; do
     share_id=$(jq -r '.share_id' <<<"$vault_json")
@@ -734,12 +739,13 @@ index_command() {
       continue
     fi
 
-    mapped=$(jq -c --argjson vault "$vault_json" '[
+    mapped=$(jq -c --argjson vault "$vault_json" \
+      --argjson limit "$INDEX_DISPLAY_TEXT_LIMIT" '[
       .items[] | {
         itemId: .id,
         shareId: .share_id,
-        vaultName: $vault.name,
-        title: .title,
+        vaultName: ($vault.name[0:$limit]),
+        title: (.title[0:$limit]),
         createTime: .create_time
       }
     ]' <<<"$item_stdout")
