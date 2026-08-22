@@ -4,10 +4,19 @@ A native Omarchy Quattro bar widget for keyboard-first Proton Pass login search 
 
 ![Proton Pass quick-access panel](preview.png)
 
-This plugin complements the official Proton Pass apps and CLI. It does not bundle, patch, or install Proton software, and it never displays a retrieved username, password, or TOTP code.
+This plugin complements the official Proton Pass apps and CLI. It does not bundle, patch, or install Proton software, and it never displays a retrieved username, password, or TOTP code. This plugin makes no network connections of its own; only Proton's official `pass-cli` contacts Proton. [SECURITY.md](SECURITY.md) states every security claim plainly and shows you how to check each one yourself in about a minute.
 
 > [!IMPORTANT]
 > Proton Pass CLI access requires a personal **Pass Plus** plan (or a bundle that includes it) or a business **Pass Professional** plan. Business **Pass Essentials is not eligible**. See Proton's [personal plan guide](https://proton.me/support/proton-pass-plans-explained) and [business plan comparison](https://proton.me/business/pass/pricing).
+
+## Security at a glance
+
+- **It makes no network connections of its own.** Only Proton's official `pass-cli` talks to Proton's servers. The plugin never opens a socket, never calls out, never "phones home."
+- **It never sees your Proton password.** Signing in opens Proton's own `pass-cli` in a terminal. Your password and any 2FA go straight to Proton; the plugin only checks afterward that a session exists.
+- **It never shows or stores a secret.** Field values go from `pass-cli` straight to your clipboard, marked sensitive. They never appear in the panel, never touch a log, never land in a file.
+- **The only things it writes to disk** are a list of recently used item IDs (no names, no secrets) and a one-way hash of the last value it copied (used to auto-clear the clipboard safely). Both are yours-only files, and the recents list is deleted the moment you turn the setting off.
+
+Every claim above is verifiable — see [SECURITY.md](SECURITY.md) for the greps and the tests. [Security model](#security-model) below has the full detail.
 
 ## Features
 
