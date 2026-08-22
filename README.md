@@ -205,7 +205,7 @@ tests/source-contract-test.sh
 omarchy plugin validate .
 ```
 
-See [`PLAN.md`](PLAN.md) for the audited implementation and the [combined 1.2.0 acceptance checklist](T12-ACCEPTANCE.md) for the release gate.
+Contributors: the implementation plan and release acceptance checklists live on the [`dev-docs`](https://github.com/josh2c/omarchy-protonpass/tree/dev-docs) branch, kept out of the installed plugin tree.
 
 ## License
 
