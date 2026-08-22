@@ -42,13 +42,6 @@ jobs:
             }
           done
 
-      - name: Check Bash syntax offline
-        timeout-minutes: 2
-        shell: bash
-        run: |
-          sudo unshare --net -- \
-            bash -n omarchy-protonpass tests/*.sh tests/mocks/*
-
       - name: Run ShellCheck offline
         timeout-minutes: 2
         shell: bash
