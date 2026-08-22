@@ -865,9 +865,6 @@ copy_command() {
   fi
   unset val
 
-  # Recent metadata is fail-soft so a copied value is never reported as a failure.
-  note_recent "$COPY_SHARE_ID" "$COPY_ITEM_ID" || true
-
   if (( COPY_CLEAR_SECONDS > 0 )); then
     secs=$COPY_CLEAR_SECONDS
     ( exec >/dev/null 2>&1 </dev/null
@@ -887,6 +884,10 @@ copy_command() {
 
   emit_copy copied "Copied to clipboard" \
     "$COPY_FIELD" "$fallback_used" "$COPY_CLEAR_SECONDS"
+
+  # Recent metadata is fail-soft and never gates the response: the clipboard
+  # already holds the value, so bookkeeping runs after the envelope is out.
+  note_recent "$COPY_SHARE_ID" "$COPY_ITEM_ID" || true
 }
 
 clear_now_command() {

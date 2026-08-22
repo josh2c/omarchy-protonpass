@@ -126,6 +126,8 @@ if ! grep -Eq '^[0-9a-f]{64}$' "$clip_hash_file"; then
   fail "clipboard ownership file contains data besides one hash"
 fi
 
+# Bookkeeping now runs after the success envelope (R-H) but still inside the
+# helper, so waiting for the process above is enough to sequence this.
 recents_file="$XDG_STATE_HOME/omarchy-protonpass/recents.json"
 [[ -f $recents_file && ! -L $recents_file ]] || fail "recents file is missing or unsafe"
 assert_eq "600" "$(stat -c '%a' "$recents_file")" "recents file mode"

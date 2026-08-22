@@ -611,6 +611,55 @@ missing_wl_paste_clear=$("$HELPER" clear-now)
 assert_jq '.state == "error"' "$missing_wl_paste_clear" "clear-now missing wl-paste"
 ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
 
+# The success envelope is emitted before recents bookkeeping (R-H). With the
+# clock the bookkeeping needs made deliberately slow, the envelope still
+# arrives immediately, and the store is still written before the helper exits.
+real_date=$(readlink -f "$TEST_BIN/date")
+rm "$TEST_BIN/date"
+cat >"$TEST_BIN/date" <<SLOW_DATE
+#!/usr/bin/env bash
+sleep 1
+exec "$real_date" "\$@"
+SLOW_DATE
+chmod +x "$TEST_BIN/date"
+
+rm -f -- "$RECENTS_FILE"
+order_start=$EPOCHREALTIME
+IFS= read -r order_envelope < <(MOCK_SCENARIO=ready "$HELPER" copy \
+  --share-id share_order_1 --item-id item_order_1 \
+  --field password --clear-seconds 0)
+order_end=$EPOCHREALTIME
+order_elapsed=$(jq -n --arg start "$order_start" --arg end "$order_end" \
+  '($end|tonumber) - ($start|tonumber)')
+assert_jq '.state == "copied"' "$order_envelope" "ordered copy response"
+assert_jq '. < 0.75' "$order_elapsed" "copy response precedes recents bookkeeping"
+
+for _ in {1..40}; do
+  if [[ -f $RECENTS_FILE ]] &&
+     jq -e '.recents[0].itemId == "item_order_1"' "$RECENTS_FILE" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+assert_jq '.recents[0].shareId == "share_order_1" and .recents[0].itemId == "item_order_1"' \
+  "$(<"$RECENTS_FILE")" "deferred bookkeeping still records the copy"
+
+rm "$TEST_BIN/date"
+ln -s "$real_date" "$TEST_BIN/date"
+
+# Rapid successive copies must still leave the store ordered newest-first.
+rm -f -- "$RECENTS_FILE"
+for rapid_number in {1..5}; do
+  rapid_copy=$(MOCK_SCENARIO=ready "$HELPER" copy \
+    --share-id "share_rapid_$rapid_number" --item-id "item_rapid_$rapid_number" \
+    --field password --clear-seconds 0)
+  assert_jq '.state == "copied"' "$rapid_copy" "rapid copy $rapid_number"
+done
+rapid_recents=$("$HELPER" recents load)
+assert_jq '[.recents[].itemId] ==
+  ["item_rapid_5","item_rapid_4","item_rapid_3","item_rapid_2","item_rapid_1"]' \
+  "$rapid_recents" "rapid successive copies stay ordered"
+
 # Callers may read the helper through a pipe rather than a command
 # substitution; capture must not depend on the caller's fd layout, and stdin
 # stays closed so nothing downstream waits on input.
