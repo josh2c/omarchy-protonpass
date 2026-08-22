@@ -80,18 +80,37 @@ Panel {
     }
   }
 
+  // The helper classifies a logged-out session two ways -- an expired or
+  // revoked session, and a plain "never signed in" -- but the response
+  // envelope carries only state + message (contracts frozen, PLAN 2.5), so the
+  // only place that distinction survives is the message the expired branch
+  // emits. tests/source-contract-test.sh pins the two strings together so a
+  // reworded classifier cannot silently re-tone the first-run view.
+  readonly property bool sessionExpired: svc.state === "LOGGED_OUT"
+    && String(svc.message).indexOf("Session expired") === 0
+
   // Every non-READY panel state as data. Blocks render in order through the one
   // Column below: a line of text in one of two tones, a copyable install
   // command, or a row of buttons. A new state is a row here, not a new Column.
+  //
+  // The tone field is a property of the row, not of a block: "setup" is the
+  // expected shape of a plugin nobody has finished setting up -- nothing is
+  // wrong, so nothing is red -- and "fault" is something that broke and keeps
+  // the alarm colour. A block's lead line takes the row's tone; a dim line is
+  // always the quieter explanatory voice. A row may carry a when predicate,
+  // letting two rows offer different views of one state; first match wins, so
+  // the narrower row is listed first.
   readonly property var stateViews: [
-    {states: ["INIT", "LOADING"], spacing: Style.space(8), blocks: [
+    {states: ["INIT", "LOADING"], tone: "setup", spacing: Style.space(8), blocks: [
       {dim: svc.state === "LOADING" ? "Loading Proton Pass logins…" : "Checking Proton Pass CLI…",
        size: Style.font.body, wrap: Text.NoWrap,
        topPad: Style.space(32), bottomPad: Style.space(32)}
     ]},
-    {states: ["MISSING_DEPS"], spacing: Style.space(10), blocks: [
-      {urgent: "Proton Pass CLI not found or wl-clipboard is unavailable", bold: true},
-      {urgent: svc.message},
+    // The install commands keep the panel open, so Check again is reachable
+    // here in a way it is not on the sign-in card.
+    {states: ["MISSING_DEPS"], tone: "setup", card: true, spacing: Style.space(10), blocks: [
+      {lead: "Set up Proton Pass", bold: true},
+      {dim: svc.message},
       {dim: "Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible."},
       {command: "curl -fsSL https://proton.me/download/pass-cli/install.sh | bash",
        name: "Copy official installer command", wrap: Text.WrapAnywhere},
@@ -99,33 +118,55 @@ Panel {
       {dim: "Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin.",
        size: Style.font.caption, align: Text.AlignLeft},
       {command: "sudo pacman -S wl-clipboard", name: "Copy wl-clipboard install command"},
-      {buttons: [{text: "Recheck", action: "recheck"}]}
+      {buttons: [{text: "Check again", action: "recheck"}]}
+    ], footer: [
+      {dim: "Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md.",
+       size: Style.font.caption, align: Text.AlignHCenter}
     ]},
-    {states: ["LOGGED_OUT"], spacing: Style.space(10), blocks: [
-      {urgent: svc.message},
+    // One action, not two: launchTerminal() closes the panel on click, and
+    // reopening re-checks through Service.onPanelOpened(), so a Check again
+    // control on this card could never be reached after a sign-in.
+    {states: ["LOGGED_OUT"], when: function() { return !root.sessionExpired },
+     tone: "setup", card: true, spacing: Style.space(10), blocks: [
+      {lead: "Ready to connect", bold: true},
+      {dim: "Sign in opens Proton's own CLI in a terminal. Your Proton password and 2FA go directly to Proton — this plugin never sees them."},
+      {dim: "Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise."},
+      {buttons: [
+        {text: "Sign in", icon: "󰍂",
+         argv: ["omarchy", "launch", "terminal", "pass-cli", "login"]}
+      ]}
+    ], footer: [
+      {dim: "Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md.",
+       size: Style.font.caption, align: Text.AlignHCenter}
+    ]},
+    {states: ["LOGGED_OUT"], tone: "fault", spacing: Style.space(10), blocks: [
+      {lead: svc.message},
       {dim: "Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise."},
       {buttons: [
         {text: "Sign in", argv: ["omarchy", "launch", "terminal", "pass-cli", "login"]},
         {text: "Retry", action: "retry"}
       ]}
     ]},
-    {states: ["LOCKED"], spacing: Style.space(10), blocks: [
-      {urgent: svc.message, wrap: Text.NoWrap},
+    {states: ["LOCKED"], tone: "fault", spacing: Style.space(10), blocks: [
+      {lead: svc.message, wrap: Text.NoWrap},
       {buttons: [
         {text: "Unlock", argv: ["omarchy", "launch", "terminal", "pass-cli", "session", "unlock"]},
         {text: "Retry", action: "retry"}
       ]}
     ]},
-    {states: ["UNREACHABLE", "ERROR"], spacing: Style.space(10), blocks: [
-      {urgent: svc.message},
+    {states: ["UNREACHABLE", "ERROR"], tone: "fault", spacing: Style.space(10), blocks: [
+      {lead: svc.message},
       {buttons: [{text: "Retry", action: "retry"}]}
     ]}
   ]
 
   readonly property var activeStateView: {
-    for (var i = 0; i < stateViews.length; i++)
-      if (stateViews[i].states.indexOf(svc.state) !== -1)
-        return stateViews[i]
+    for (var i = 0; i < stateViews.length; i++) {
+      var view = stateViews[i]
+      if (view.states.indexOf(svc.state) === -1) continue
+      if (view.when !== undefined && !view.when()) continue
+      return view
+    }
     return null
   }
 
@@ -1045,44 +1086,96 @@ Panel {
           Column {
             id: stateView
             readonly property var view: root.activeStateView
+            // A setup state reads as a card: the same block list on a bordered
+            // surface, with its trust footer outside the card. A fault state
+            // instantiates no surface at all, so its item tree is exactly what
+            // it was before the card existed.
+            readonly property bool carded: view !== null && view.card === true
             visible: view !== null
             width: parent.width
             spacing: view ? view.spacing : 0
 
+            Item {
+              id: stateBody
+              readonly property real pad: stateView.carded ? Style.space(14) : 0
+              width: parent.width
+              implicitHeight: blockColumn.implicitHeight + pad * 2
+
+              Loader {
+                anchors.fill: parent
+                active: stateView.carded
+
+                sourceComponent: BorderSurface {
+                  radius: Style.cornerRadius
+                  color: Style.normalFillFor(root.foreground, Color.accent)
+                  borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
+                }
+              }
+
+              Column {
+                id: blockColumn
+                x: stateBody.pad
+                y: stateBody.pad
+                width: parent.width - stateBody.pad * 2
+                spacing: stateView.view ? stateView.view.spacing : 0
+
+                Repeater {
+                  model: stateView.view ? stateView.view.blocks : []
+
+                  delegate: Loader {
+                    id: blockLoader
+                    required property var modelData
+                    // No explicit height: the Loader adopts the block's implicitHeight
+                    // and resizes the block to match. Binding height to
+                    // item.implicitHeight instead makes the two chase each other.
+                    width: parent.width
+                    sourceComponent: modelData.command !== undefined
+                      ? commandBlock
+                      : (modelData.buttons !== undefined ? buttonsBlock : textBlock)
+                    onLoaded: item.spec = blockLoader.modelData
+                  }
+                }
+              }
+            }
+
+            // The trust footer sits under the card, not inside it -- it speaks
+            // for the plugin as a whole, not for the step being offered.
             Repeater {
-              model: stateView.view ? stateView.view.blocks : []
+              model: stateView.view && stateView.view.footer !== undefined
+                ? stateView.view.footer : []
 
               delegate: Loader {
-                id: blockLoader
+                id: footerLoader
                 required property var modelData
-                // No explicit height: the Loader adopts the block's implicitHeight
-                // and resizes the block to match. Binding height to
-                // item.implicitHeight instead makes the two chase each other.
                 width: parent.width
-                sourceComponent: modelData.command !== undefined
-                  ? commandBlock
-                  : (modelData.buttons !== undefined ? buttonsBlock : textBlock)
-                onLoaded: item.spec = blockLoader.modelData
+                sourceComponent: textBlock
+                onLoaded: item.spec = footerLoader.modelData
               }
             }
 
             Component {
               id: textBlock
 
-              // Two tones: urgent names what went wrong, dim explains it. The
-              // shape they share -- centred, wrapped, body or small-body -- is
-              // the default, so a block only spells out where it differs.
+              // Two voices: the lead names the situation, dim explains it. Only
+              // the lead carries the row's tone -- alarm colour on a fault,
+              // plain foreground on a setup state, because "not set up yet" is
+              // not a fault and must not be dressed as one. The shape they
+              // share -- centred, wrapped, body or small-body -- is the
+              // default, so a block only spells out where it differs.
               Text {
                 property var spec: ({})
-                readonly property bool urgentTone: spec.urgent !== undefined
-                text: urgentTone ? spec.urgent : (spec.dim !== undefined ? spec.dim : "")
+                readonly property bool leadTone: spec.lead !== undefined
+                readonly property bool faultTone: stateView.view
+                  && stateView.view.tone === "fault"
+                text: leadTone ? spec.lead : (spec.dim !== undefined ? spec.dim : "")
                 textFormat: Text.PlainText
-                color: urgentTone ? root.urgent : root.dim
+                color: leadTone ? (faultTone ? root.urgent : root.foreground) : root.dim
                 font.family: root.fontFamily
                 font.pixelSize: spec.size !== undefined
-                  ? spec.size : (urgentTone ? Style.font.body : Style.font.bodySmall)
+                  ? spec.size : (leadTone ? Style.font.body : Style.font.bodySmall)
                 font.bold: spec.bold === true
-                horizontalAlignment: spec.align !== undefined ? spec.align : Text.AlignHCenter
+                horizontalAlignment: spec.align !== undefined ? spec.align
+                  : (stateView.carded ? Text.AlignLeft : Text.AlignHCenter)
                 wrapMode: spec.wrap !== undefined ? spec.wrap : Text.WordWrap
                 topPadding: spec.topPad !== undefined ? spec.topPad : 0
                 bottomPadding: spec.bottomPad !== undefined ? spec.bottomPad : 0
@@ -1143,6 +1236,7 @@ Panel {
                     delegate: Button {
                       required property var modelData
                       text: modelData.text
+                      iconText: modelData.icon !== undefined ? modelData.icon : ""
                       onClicked: root.runStateAction(modelData)
                     }
                   }
