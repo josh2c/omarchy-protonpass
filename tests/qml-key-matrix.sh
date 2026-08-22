@@ -80,8 +80,13 @@ nested_pid=$!
 nested_display=""
 for _ in $(seq 1 80); do
   sleep 0.5
-  lock=$(ls -l /proc/"$nested_pid"/fd 2>/dev/null |
-    grep -o "/run/user/$(id -u)/wayland-[0-9]*\.lock" | head -1)
+  lock=""
+  for fd in /proc/"$nested_pid"/fd/*; do
+    target=$(readlink "$fd" 2>/dev/null) || continue
+    case $target in
+      /run/user/"$(id -u)"/wayland-*.lock) lock=$target; break ;;
+    esac
+  done
   if [[ -n $lock ]]; then
     nested_display=$(basename "$lock" .lock)
     break

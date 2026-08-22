@@ -19,7 +19,6 @@
 # Usage: tests/qml-panel-snapshot.sh [output-file]
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ROOT=$PWD
 OUT=${1:-/dev/stdout}
 
 if ! command -v qs >/dev/null 2>&1; then
