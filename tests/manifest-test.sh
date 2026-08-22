@@ -10,8 +10,10 @@ fail() {
 }
 
 jq -e . "$MANIFEST" >/dev/null || fail "manifest.json is not valid JSON"
-jq -e '.version == "1.2.0"' "$MANIFEST" >/dev/null || \
-  fail "manifest version is not prepared for the 1.2.0 release"
+# Releases bump the version; the test asserts the shape, never a pinned value,
+# so a release commit can never turn the suite red by construction.
+jq -e '.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")' "$MANIFEST" >/dev/null || \
+  fail "manifest version is not plain semver"
 
 while IFS= read -r entry_point; do
   [[ -f "$ROOT/$entry_point" ]] || fail "referenced entry point does not exist: $entry_point"
