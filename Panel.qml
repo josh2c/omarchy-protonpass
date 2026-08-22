@@ -13,6 +13,9 @@ Panel {
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
+  // Fine print sits a step below dim: present for the user who goes looking,
+  // never competing with the sentence that tells them what to do.
+  readonly property color muted: Qt.darker(foreground, 1.9)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   property bool cursorActive: false
   property int cursorIndex: 0
@@ -108,10 +111,10 @@ Panel {
     ]},
     // The install commands keep the panel open, so Check again is reachable
     // here in a way it is not on the sign-in card.
-    {states: ["MISSING_DEPS"], tone: "setup", card: true, spacing: Style.space(10), blocks: [
+    {states: ["MISSING_DEPS"], tone: "setup", card: true, spacing: Style.space(8), blocks: [
       {lead: "Set up Proton Pass", bold: true},
       {dim: svc.message},
-      {dim: "Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible."},
+      {fine: "Requires Pass Plus or Pass Professional."},
       {command: "curl -fsSL https://proton.me/download/pass-cli/install.sh | bash",
        name: "Copy official installer command", wrap: Text.WrapAnywhere},
       {command: "yay -S proton-pass-cli-bin", name: "Copy Arch AUR command"},
@@ -127,10 +130,10 @@ Panel {
     // reopening re-checks through Service.onPanelOpened(), so a Check again
     // control on this card could never be reached after a sign-in.
     {states: ["LOGGED_OUT"], when: function() { return !root.sessionExpired },
-     tone: "setup", card: true, spacing: Style.space(10), blocks: [
+     tone: "setup", card: true, spacing: Style.space(8), blocks: [
       {lead: "Ready to connect", bold: true},
-      {dim: "Sign in opens Proton's own CLI in a terminal. Your Proton password and 2FA go directly to Proton — this plugin never sees them."},
-      {dim: "Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise."},
+      {dim: "Sign in opens Proton's own CLI in a terminal — your password and 2FA go straight to Proton, never to this plugin."},
+      {fine: "Requires Pass Plus or Pass Professional."},
       {buttons: [
         {text: "Sign in", icon: "󰍂",
          argv: ["omarchy", "launch", "terminal", "pass-cli", "login"]}
@@ -1097,7 +1100,7 @@ Panel {
 
             Item {
               id: stateBody
-              readonly property real pad: stateView.carded ? Style.space(14) : 0
+              readonly property real pad: stateView.carded ? Style.space(12) : 0
               width: parent.width
               implicitHeight: blockColumn.implicitHeight + pad * 2
 
@@ -1165,14 +1168,18 @@ Panel {
               Text {
                 property var spec: ({})
                 readonly property bool leadTone: spec.lead !== undefined
+                readonly property bool fineTone: spec.fine !== undefined
                 readonly property bool faultTone: stateView.view
                   && stateView.view.tone === "fault"
-                text: leadTone ? spec.lead : (spec.dim !== undefined ? spec.dim : "")
+                text: leadTone ? spec.lead
+                  : (fineTone ? spec.fine : (spec.dim !== undefined ? spec.dim : ""))
                 textFormat: Text.PlainText
-                color: leadTone ? (faultTone ? root.urgent : root.foreground) : root.dim
+                color: leadTone ? (faultTone ? root.urgent : root.foreground)
+                  : (fineTone ? root.muted : root.dim)
                 font.family: root.fontFamily
-                font.pixelSize: spec.size !== undefined
-                  ? spec.size : (leadTone ? Style.font.body : Style.font.bodySmall)
+                font.pixelSize: spec.size !== undefined ? spec.size
+                  : (leadTone ? Style.font.body
+                    : (fineTone ? Style.font.caption : Style.font.bodySmall))
                 font.bold: spec.bold === true
                 horizontalAlignment: spec.align !== undefined ? spec.align
                   : (stateView.carded ? Text.AlignLeft : Text.AlignHCenter)
@@ -1225,9 +1232,13 @@ Panel {
                 property var spec: ({})
                 implicitHeight: stateButtons.implicitHeight
 
+                // A card's action anchors to the card's left edge, under the
+                // text it follows; a fault view keeps its centred button row.
                 Row {
                   id: stateButtons
-                  anchors.horizontalCenter: parent.horizontalCenter
+                  anchors.left: stateView.carded ? parent.left : undefined
+                  anchors.horizontalCenter: stateView.carded
+                    ? undefined : parent.horizontalCenter
                   spacing: Style.space(8)
 
                   Repeater {
