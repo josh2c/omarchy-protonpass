@@ -10,6 +10,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SERVICE_SOURCE=$(<"$ROOT/Service.qml")
 PANEL_SOURCE=$(<"$ROOT/Panel.qml")
+HELPER_SOURCE=$(<"$ROOT/omarchy-protonpass")
 
 command -v node >/dev/null || {
   printf 'FAIL: node is required for keybind parser assertions\n' >&2
@@ -144,5 +145,18 @@ for action in "username" "password" "TOTP code"; do
     "the Copy $action icon button lacks an accessible name for both states"
 done
 
+
+# --- The logged-out kind survives the envelope --------------------------
+# Not a wording test: the helper classifies "expired session" and "never
+# signed in" separately, the envelope carries only state + message, and the
+# panel re-derives the split from the expired message so a first run is not
+# shown in the alarm tone. The two strings are one contract -- reword the
+# classifier without the panel and the first-run view silently turns red.
+[[ $HELPER_SOURCE == *'CLASSIFIED_KIND=session-expired'* ]] || \
+  fail "the helper no longer classifies an expired session separately"
+[[ $HELPER_SOURCE == *'CLASSIFIED_MESSAGE="Session expired'* ]] || \
+  fail "the expired-session message the panel keys off has been reworded"
+assert_panel_contains 'String(svc.message).indexOf("Session expired") === 0' \
+  "the panel no longer tells an expired session apart from a first run"
 
 printf 'service and panel source contract tests passed\n'

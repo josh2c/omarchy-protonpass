@@ -80,18 +80,35 @@ Panel {
     }
   }
 
+  // The helper classifies a logged-out session two ways -- an expired or
+  // revoked session, and a plain "never signed in" -- but the response
+  // envelope carries only state + message (contracts frozen, PLAN 2.5), so the
+  // only place that distinction survives is the message the expired branch
+  // emits. tests/source-contract-test.sh pins the two strings together so a
+  // reworded classifier cannot silently re-tone the first-run view.
+  readonly property bool sessionExpired: svc.state === "LOGGED_OUT"
+    && String(svc.message).indexOf("Session expired") === 0
+
   // Every non-READY panel state as data. Blocks render in order through the one
   // Column below: a line of text in one of two tones, a copyable install
   // command, or a row of buttons. A new state is a row here, not a new Column.
+  //
+  // The tone field is a property of the row, not of a block: "setup" is the
+  // expected shape of a plugin nobody has finished setting up -- nothing is
+  // wrong, so nothing is red -- and "fault" is something that broke and keeps
+  // the alarm colour. A block's lead line takes the row's tone; a dim line is
+  // always the quieter explanatory voice. A row may carry a when predicate,
+  // letting two rows offer different views of one state; first match wins, so
+  // the narrower row is listed first.
   readonly property var stateViews: [
-    {states: ["INIT", "LOADING"], spacing: Style.space(8), blocks: [
+    {states: ["INIT", "LOADING"], tone: "setup", spacing: Style.space(8), blocks: [
       {dim: svc.state === "LOADING" ? "Loading Proton Pass logins…" : "Checking Proton Pass CLI…",
        size: Style.font.body, wrap: Text.NoWrap,
        topPad: Style.space(32), bottomPad: Style.space(32)}
     ]},
-    {states: ["MISSING_DEPS"], spacing: Style.space(10), blocks: [
-      {urgent: "Proton Pass CLI not found or wl-clipboard is unavailable", bold: true},
-      {urgent: svc.message},
+    {states: ["MISSING_DEPS"], tone: "setup", spacing: Style.space(10), blocks: [
+      {lead: "Set up Proton Pass", bold: true},
+      {dim: svc.message},
       {dim: "Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible."},
       {command: "curl -fsSL https://proton.me/download/pass-cli/install.sh | bash",
        name: "Copy official installer command", wrap: Text.WrapAnywhere},
@@ -99,33 +116,50 @@ Panel {
       {dim: "Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin.",
        size: Style.font.caption, align: Text.AlignLeft},
       {command: "sudo pacman -S wl-clipboard", name: "Copy wl-clipboard install command"},
-      {buttons: [{text: "Recheck", action: "recheck"}]}
+      {dim: "Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md.",
+       size: Style.font.caption},
+      {buttons: [{text: "Check again", action: "recheck"}]}
     ]},
-    {states: ["LOGGED_OUT"], spacing: Style.space(10), blocks: [
-      {urgent: svc.message},
+    {states: ["LOGGED_OUT"], when: function() { return !root.sessionExpired },
+     tone: "setup", spacing: Style.space(10), blocks: [
+      {lead: "Ready to connect", bold: true},
+      {dim: "Sign in opens Proton's own CLI in a terminal. Your Proton password and 2FA go directly to Proton; this plugin never sees them."},
+      {dim: "Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise."},
+      {dim: "Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md.",
+       size: Style.font.caption},
+      {buttons: [
+        {text: "Sign in", argv: ["omarchy", "launch", "terminal", "pass-cli", "login"]},
+        {text: "Check again", action: "retry"}
+      ]}
+    ]},
+    {states: ["LOGGED_OUT"], tone: "fault", spacing: Style.space(10), blocks: [
+      {lead: svc.message},
       {dim: "Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise."},
       {buttons: [
         {text: "Sign in", argv: ["omarchy", "launch", "terminal", "pass-cli", "login"]},
         {text: "Retry", action: "retry"}
       ]}
     ]},
-    {states: ["LOCKED"], spacing: Style.space(10), blocks: [
-      {urgent: svc.message, wrap: Text.NoWrap},
+    {states: ["LOCKED"], tone: "fault", spacing: Style.space(10), blocks: [
+      {lead: svc.message, wrap: Text.NoWrap},
       {buttons: [
         {text: "Unlock", argv: ["omarchy", "launch", "terminal", "pass-cli", "session", "unlock"]},
         {text: "Retry", action: "retry"}
       ]}
     ]},
-    {states: ["UNREACHABLE", "ERROR"], spacing: Style.space(10), blocks: [
-      {urgent: svc.message},
+    {states: ["UNREACHABLE", "ERROR"], tone: "fault", spacing: Style.space(10), blocks: [
+      {lead: svc.message},
       {buttons: [{text: "Retry", action: "retry"}]}
     ]}
   ]
 
   readonly property var activeStateView: {
-    for (var i = 0; i < stateViews.length; i++)
-      if (stateViews[i].states.indexOf(svc.state) !== -1)
-        return stateViews[i]
+    for (var i = 0; i < stateViews.length; i++) {
+      var view = stateViews[i]
+      if (view.states.indexOf(svc.state) === -1) continue
+      if (view.when !== undefined && !view.when()) continue
+      return view
+    }
     return null
   }
 
@@ -1069,18 +1103,23 @@ Panel {
             Component {
               id: textBlock
 
-              // Two tones: urgent names what went wrong, dim explains it. The
-              // shape they share -- centred, wrapped, body or small-body -- is
-              // the default, so a block only spells out where it differs.
+              // Two voices: the lead names the situation, dim explains it. Only
+              // the lead carries the row's tone -- alarm colour on a fault,
+              // plain foreground on a setup state, because "not set up yet" is
+              // not a fault and must not be dressed as one. The shape they
+              // share -- centred, wrapped, body or small-body -- is the
+              // default, so a block only spells out where it differs.
               Text {
                 property var spec: ({})
-                readonly property bool urgentTone: spec.urgent !== undefined
-                text: urgentTone ? spec.urgent : (spec.dim !== undefined ? spec.dim : "")
+                readonly property bool leadTone: spec.lead !== undefined
+                readonly property bool faultTone: stateView.view
+                  && stateView.view.tone === "fault"
+                text: leadTone ? spec.lead : (spec.dim !== undefined ? spec.dim : "")
                 textFormat: Text.PlainText
-                color: urgentTone ? root.urgent : root.dim
+                color: leadTone ? (faultTone ? root.urgent : root.foreground) : root.dim
                 font.family: root.fontFamily
                 font.pixelSize: spec.size !== undefined
-                  ? spec.size : (urgentTone ? Style.font.body : Style.font.bodySmall)
+                  ? spec.size : (leadTone ? Style.font.body : Style.font.bodySmall)
                 font.bold: spec.bold === true
                 horizontalAlignment: spec.align !== undefined ? spec.align : Text.AlignHCenter
                 wrapMode: spec.wrap !== undefined ? spec.wrap : Text.WordWrap

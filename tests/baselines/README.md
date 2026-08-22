@@ -5,7 +5,7 @@ future change can be diffed against something instead of asserted about.
 
 | File | Produced by | What it pins |
 |---|---|---|
-| `panel-snapshot.txt` | `tests/qml-panel-snapshot.sh` | Every visible item in fifteen panel states: absolute position, size, text, glyph, colour, font, alignment, wrap, accessible name |
+| `panel-snapshot.txt` | `tests/qml-panel-snapshot.sh` | Every visible item in sixteen panel states: absolute position, size, text, glyph, colour, font, alignment, wrap, accessible name |
 | `key-matrix.txt` | `tests/qml-key-matrix.sh` | Every keyboard binding in both focus contexts, and what the panel did |
 | `service-scenarios.txt` | `tests/qml-service-scenarios.sh` | The state the Service settles in for each mock scenario, plus the auth-during-refresh invariant |
 

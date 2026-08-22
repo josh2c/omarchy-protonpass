@@ -17,38 +17,53 @@ SNAPSHOT-BEGIN MISSING_DEPS
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
 | QQuickText at=37.39,21 size=360.61x14 text="PROTON PASS CLI NOT FOUND" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| QQuickText at=0,47 size=398x32 text="Proton Pass CLI not found or wl-clipboard is unavailable" color=#ff5555 px=12 bold=true align=4 wrap=1
-| QQuickText at=0,89 size=398x16 text="Proton Pass CLI not found" color=#ff5555 px=12 bold=false align=4 wrap=1
-| QQuickText at=0,115 size=398x30 text="Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible." color=#949494 px=11 bold=false align=4 wrap=1
-| BorderSurface at=0,155 size=398x46 fill=#ffffff
-| QQuickText at=9,164 size=350x28 text="curl -fsSL https://proton.me/download/pass-cli/install.sh | bash" color=#e6e6e6 px=10 bold=false align=1 wrap=3
-| PanelActionButton at=368,167 size=22x22 icon="" fill=#00000000 a11y="Copy official installer command"
-| QQuickText at=373,168 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| BorderSurface at=0,211 size=398x32 fill=#ffffff
-| QQuickText at=9,220 size=350x14 text="yay -S proton-pass-cli-bin" color=#e6e6e6 px=10 bold=false align=1 wrap=0
-| PanelActionButton at=368,216 size=22x22 icon="" fill=#00000000 a11y="Copy Arch AUR command"
-| QQuickText at=373,217 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| QQuickText at=0,253 size=398x28 text="Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin." color=#949494 px=10 bold=false align=1 wrap=1
-| BorderSurface at=0,291 size=398x32 fill=#ffffff
-| QQuickText at=9,300 size=350x14 text="sudo pacman -S wl-clipboard" color=#e6e6e6 px=10 bold=false align=1 wrap=0
-| PanelActionButton at=368,296 size=22x22 icon="" fill=#00000000 a11y="Copy wl-clipboard install command"
-| QQuickText at=373,297 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=163,333 size=72.31x30 text="Recheck" fill=#00000000
-| QQuickText at=174,340 size=50.31x16 text="Recheck" color=#d3c6aa px=12 bold=false align=1 wrap=0
-| QQuickRectangle at=390,49 size=6x312 fill=#383838
+| QQuickText at=0,47 size=398x16 text="Set up Proton Pass" color=#e6e6e6 px=12 bold=true align=4 wrap=1
+| QQuickText at=0,73 size=398x15 text="Proton Pass CLI not found" color=#949494 px=11 bold=false align=4 wrap=1
+| QQuickText at=0,98 size=398x30 text="Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible." color=#949494 px=11 bold=false align=4 wrap=1
+| BorderSurface at=0,138 size=398x46 fill=#ffffff
+| QQuickText at=9,147 size=350x28 text="curl -fsSL https://proton.me/download/pass-cli/install.sh | bash" color=#e6e6e6 px=10 bold=false align=1 wrap=3
+| PanelActionButton at=368,150 size=22x22 icon="" fill=#00000000 a11y="Copy official installer command"
+| QQuickText at=373,151 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| BorderSurface at=0,194 size=398x32 fill=#ffffff
+| QQuickText at=9,203 size=350x14 text="yay -S proton-pass-cli-bin" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=368,199 size=22x22 icon="" fill=#00000000 a11y="Copy Arch AUR command"
+| QQuickText at=373,200 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| QQuickText at=0,236 size=398x28 text="Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin." color=#949494 px=10 bold=false align=1 wrap=1
+| BorderSurface at=0,274 size=398x32 fill=#ffffff
+| QQuickText at=9,283 size=350x14 text="sudo pacman -S wl-clipboard" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=368,279 size=22x22 icon="" fill=#00000000 a11y="Copy wl-clipboard install command"
+| QQuickText at=373,280 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| QQuickText at=0,316 size=398x28 text="Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md." color=#949494 px=10 bold=false align=4 wrap=1
+| Button at=148,354 size=101.06x30 text="Check again" fill=#00000000
+| QQuickText at=159,361 size=79.06x16 text="Check again" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x333 fill=#383838
 SNAPSHOT-END MISSING_DEPS
-SNAPSHOT-BEGIN LOGGED_OUT
+SNAPSHOT-BEGIN LOGGED_OUT_FIRST_RUN
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=360.61x14 text="SIGNED OUT — SIGN IN AGAIN" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| QQuickText at=0,47 size=398x16 text="Signed out — sign in again" color=#ff5555 px=12 bold=false align=4 wrap=1
+| QQuickText at=37.39,21 size=360.61x14 text="NOT SIGNED IN TO PROTON PASS" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x16 text="Ready to connect" color=#e6e6e6 px=12 bold=true align=4 wrap=1
+| QQuickText at=0,73 size=398x45 text="Sign in opens Proton's own CLI in a terminal. Your Proton password and 2FA go directly to Proton; this plugin never sees them." color=#949494 px=11 bold=false align=4 wrap=1
+| QQuickText at=0,128 size=398x45 text="Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise." color=#949494 px=11 bold=false align=4 wrap=1
+| QQuickText at=0,183 size=398x28 text="Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md." color=#949494 px=10 bold=false align=4 wrap=1
+| Button at=108,221 size=72.31x30 text="Sign in" fill=#00000000
+| QQuickText at=119,228 size=50.31x16 text="Sign in" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| Button at=188.31,221 size=101.06x30 text="Check again" fill=#00000000
+| QQuickText at=199.31,228 size=79.06x16 text="Check again" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x200 fill=#383838
+SNAPSHOT-END LOGGED_OUT_FIRST_RUN
+SNAPSHOT-BEGIN LOGGED_OUT_EXPIRED
+| QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
+| QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
+| QQuickText at=37.39,21 size=360.61x14 text="SESSION EXPIRED — SIGN IN AGAIN" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| QQuickText at=0,47 size=398x16 text="Session expired — sign in again" color=#ff5555 px=12 bold=false align=4 wrap=1
 | QQuickText at=0,73 size=398x45 text="Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise." color=#949494 px=11 bold=false align=4 wrap=1
 | Button at=130,128 size=72.31x30 text="Sign in" fill=#00000000
 | QQuickText at=141,135 size=50.31x16 text="Sign in" color=#d3c6aa px=12 bold=false align=1 wrap=0
 | Button at=210.31,128 size=57.94x30 text="Retry" fill=#00000000
 | QQuickText at=221.31,135 size=35.94x16 text="Retry" color=#d3c6aa px=12 bold=false align=1 wrap=0
 | QQuickRectangle at=390,49 size=6x107 fill=#383838
-SNAPSHOT-END LOGGED_OUT
+SNAPSHOT-END LOGGED_OUT_EXPIRED
 SNAPSHOT-BEGIN LOCKED
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0

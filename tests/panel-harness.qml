@@ -49,8 +49,14 @@ ShellRoot {
     {label: "LOADING", setup: function(svc) { svc.state = "LOADING" }},
     {label: "MISSING_DEPS", setup: function(svc) {
       svc.state = "MISSING_DEPS"; svc.message = "Proton Pass CLI not found" }},
-    {label: "LOGGED_OUT", setup: function(svc) {
-      svc.state = "LOGGED_OUT"; svc.message = "Signed out — sign in again" }},
+    // Two logged-out scenarios, not one: the panel tells the first run apart
+    // from an expired session by the classifier message, so both messages have
+    // to be the ones the helper actually emits (omarchy-protonpass,
+    // classify_failure) or the snapshot proves nothing about the split.
+    {label: "LOGGED_OUT_FIRST_RUN", setup: function(svc) {
+      svc.state = "LOGGED_OUT"; svc.message = "Not signed in to Proton Pass" }},
+    {label: "LOGGED_OUT_EXPIRED", setup: function(svc) {
+      svc.state = "LOGGED_OUT"; svc.message = "Session expired — sign in again" }},
     {label: "LOCKED", setup: function(svc) {
       svc.state = "LOCKED"; svc.message = "Session locked — unlock to continue" }},
     {label: "UNREACHABLE", setup: function(svc) {
