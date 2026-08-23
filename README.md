@@ -4,7 +4,7 @@ A native Omarchy Quattro bar widget for keyboard-first Proton Pass login search 
 
 ![Proton Pass quick-access panel](preview.png)
 
-This plugin complements the official Proton Pass apps and CLI. It does not bundle, patch, or install Proton software, and it never displays a retrieved username, password, or TOTP code. This plugin makes no network connections of its own; only Proton's official `pass-cli` contacts Proton. [SECURITY.md](SECURITY.md) states every security claim plainly and shows you how to check each one yourself in about a minute.
+It complements the official Proton Pass apps and CLI rather than replacing them, and never displays a retrieved username, password, or TOTP code. The plugin makes no network connections of its own; only Proton's official `pass-cli` contacts Proton. [SECURITY.md](SECURITY.md) states every security claim plainly and shows you how to check each one yourself.
 
 > [!IMPORTANT]
 > Proton Pass CLI access requires a personal **Pass Plus** plan (or a bundle that includes it) or a business **Pass Professional** plan. Business **Pass Essentials is not eligible**. See Proton's [personal plan guide](https://proton.me/support/proton-pass-plans-explained) and [business plan comparison](https://proton.me/business/pass/pricing).
@@ -16,25 +16,19 @@ This plugin complements the official Proton Pass apps and CLI. It does not bundl
 - **It never shows or stores a secret.** Field values go from `pass-cli` straight to your clipboard, marked sensitive. They never appear in the panel, never touch a log, never land in a file.
 - **The only things it writes to disk** are a list of recently used item IDs (no names, no secrets) and a one-way hash of the last value it copied (used to auto-clear the clipboard safely). Both are yours-only files, and the recents list is deleted the moment you turn the setting off.
 
-Every claim above is verifiable — see [SECURITY.md](SECURITY.md) for the greps and the tests. [Security model](#security-model) below has the full detail.
+Every claim above is verifiable. [SECURITY.md](SECURITY.md) has the full model, the honest limits, and the greps and tests you can run to check each claim yourself.
 
 ## Features
 
-- Search active login items across all non-excluded vaults by title or vault name.
-- Keep refresh, new-login, lock, and logout controls fixed in the header while long login lists scroll independently.
-- Copy usernames, passwords, and TOTP codes without sending secret values through QML.
-- Fall back from a missing username to the login's email address.
-- Create a login with a generated password from non-secret title, username or email, and vault fields.
-- Mark every clipboard offer sensitive and clear it after a configurable delay only if it still contains the copied value.
-- Clear the current plugin-owned clipboard value immediately from the panel or keyboard.
-- Optionally make clipboard offers paste-once.
-- Show recently copied logins using an optional local ID-and-timestamp-only history.
-- Show when a login was last used, or when it was created if it has not been copied recently.
-- Lock or log out of the CLI session; logout requires a second confirmation.
-- Sign in and unlock through Proton's normal CLI flow in a terminal; credentials remain under Proton's control.
-- Keep only item IDs, share IDs, titles, vault names, creation times, and recent-use timestamps in memory for the current shell session.
+- Search login items across your vaults by title or vault name.
+- Copy a username, password, or TOTP code with one keystroke. Username falls back to email.
+- Create a login with a generated password, straight from the panel.
+- Recently used logins show first, with when each was last used.
+- Copied values are marked sensitive, kept out of clipboard history, and cleared after a set delay. Clear one now from the panel too.
+- Lock or log out of the session; logout asks for confirmation.
+- Sign in and unlock through Proton's own CLI in a terminal.
 
-Item editing, deletion, sharing, attachments, custom-password creation, secret display, and offline use are outside the current scope.
+Editing, deleting, sharing, attachments, custom-password creation, secret display, and offline use are out of scope.
 
 ## Requirements
 
@@ -80,11 +74,9 @@ The panel automatically rechecks the session when it is opened again after login
 
 ## Create a login
 
-Choose the **Create login** action, enter a title and either a username or email, then select any available non-excluded vault. Empty vaults remain available in the picker. The plugin helper generates a cryptographically random 24-character password with upper-case, lower-case, numeric, and symbol characters and sends the complete login template to `pass-cli` over standard input. The password never enters QML, command-line arguments, the environment, logs, or files.
+Choose the **Create login** action, enter a title and a username or email, and pick a vault. The helper generates a random 24-character password and hands the login to `pass-cli`; the password never touches the UI, arguments, logs, or files (see [SECURITY.md](SECURITY.md)). Use **Copy password** in the success message to copy it once.
 
-After creation, use **Copy password** in the success message to retrieve the new password through the normal sensitive clipboard path. Proton Pass remains the source of truth; the plugin does not retain the generated password.
-
-To create a login with your own password, use an official Proton Pass app. The CLI has no safe interactive create flow, and putting a custom password in a shell command would expose it through shell history and process arguments.
+To set your own password, use an official Proton Pass app. The CLI has no safe interactive create flow, and typing a password into a shell command would leak it through shell history.
 
 ## Keyboard use
 
@@ -153,32 +145,6 @@ Configure the widget through Omarchy's plugin settings.
 | Show recent items | On | Shows up to eight recently copied logins; turning it off deletes the local recents store immediately |
 
 Vault names containing commas cannot be excluded individually in v1.
-
-## Security model
-
-QML receives only non-secret item metadata from Proton. Copy requests send validated opaque IDs and a fixed field enum to the bundled Bash helper. The helper is the only plugin component that handles secret bytes: it retrieves one field into an unexported variable, pipes the value directly to `wl-copy --sensitive`, hashes it, unsets it, and returns secret-free JSON.
-
-Login creation sends the user-entered, non-secret title and username or email to the helper as a strict JSON document over standard input. The helper generates the password from `/dev/urandom`, sends it inside the stdin template consumed by `pass-cli`, and wipes its transient variable after the pipe closes. There is no custom-password field or terminal command path.
-
-Secrets are never placed in:
-
-- QML properties or rendered UI
-- command-line arguments or exported environment variables
-- files, logs, notifications, or helper JSON
-- clipboard-history entries created by Omarchy's built-in history capture
-
-Automatic expiry is hash-verified. When the timer fires, the helper clears the clipboard only if its current content still matches the value this plugin copied. Content copied afterward is left untouched.
-
-When **Show recent items** is enabled, the helper stores at most eight `{shareId, itemId, ts}` records in `$XDG_STATE_HOME/omarchy-protonpass/recents.json` (normally `~/.local/state/omarchy-protonpass/recents.json`) with mode `0600`. It stores no titles, vault names, usernames, fields, or secret values. The panel joins those opaque IDs against its in-memory index. Turning the setting off deletes the store immediately.
-
-### Accepted residual risks
-
-- Any Wayland client able to read the clipboard can access a copied value while it remains live. The sensitive marker and expiry window reduce exposure; they do not isolate the clipboard.
-- An attacker already running as your user can access the Proton CLI session and same-user process memory. The helper's transient shell variable and pipe buffers are inside that already-compromised boundary.
-- A co-resident same-user plugin can invoke the helper's copy, create, lock, or logout operations; same-UID code already has direct access to the Proton CLI session.
-- The clipboard ownership file contains only a password hash and lives in `$XDG_RUNTIME_DIR`, but a weak password hash is theoretically susceptible to offline guessing while that runtime file exists.
-- The recents file is non-secret metadata at rest. It contains opaque item/share IDs and timestamps only and is deleted when recents are disabled.
-- Proton Pass CLI sessions are online: refresh, copy, lock, and unlock behavior depends on Proton being reachable.
 
 ## Update or uninstall
 

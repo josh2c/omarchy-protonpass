@@ -1,6 +1,6 @@
 # Security
 
-This plugin copies passwords and two-factor codes. You are right to be careful about what you install for that. This document states plainly what the plugin can and cannot do, and — more importantly — how to check every claim yourself in about a minute. Nothing here asks you to take our word for it.
+This plugin copies passwords and two-factor codes. You are right to be careful about what you install for that. This document states plainly what the plugin can and cannot do, and, more importantly, how to check every claim yourself in about a minute. Nothing here asks you to take our word for it.
 
 ## Security at a glance
 
@@ -11,7 +11,7 @@ This plugin copies passwords and two-factor codes. You are right to be careful a
 
 ## Verify it yourself
 
-The entire runtime is four files — one Bash helper, two QML files, and one small JavaScript file — about 3,300 lines you can read. Run these from the plugin directory:
+The entire runtime is four files (one Bash helper, two QML files, one small JavaScript file), about 3,300 lines you can read. Run these from the plugin directory:
 
 ```sh
 # No network code. The only hit is a help-text string showing you the installer command.
@@ -25,39 +25,39 @@ grep -rn 'show-secrets' .
 # The copy at the bottom passes copy_args, declared as (--sensitive) above it.
 grep -nE 'wl-copy|--sensitive' omarchy-protonpass
 
-# Sign-in is delegated to the official CLI in a terminal — the plugin never handles it.
+# Sign-in is delegated to the official CLI in a terminal, the plugin never handles it.
 grep -n 'pass-cli.*login' Panel.qml
 
 # No arbitrary-code constructs in the helper or the keybind parser.
 grep -nE 'eval|sh -c|`' omarchy-protonpass Keybinds.js
 ```
 
-And the strongest check is mechanical: `tests/security-test.sh` runs on every commit in CI (offline, with no Proton account). It statically forbids `--show-secrets`, `eval`, `sh -c`, exported secret variables, and secret-shaped UI properties — and it dynamically plants a marker "secret," runs a real copy, and scans process arguments, the environment, and every file the run touched to prove the marker never escaped. You can run it yourself: `bash tests/security-test.sh`.
+And the strongest check is mechanical: `tests/security-test.sh` runs on every commit in CI (offline, with no Proton account). It statically forbids `--show-secrets`, `eval`, `sh -c`, exported secret variables, and secret-shaped UI properties, and it dynamically plants a marker "secret," runs a real copy, and scans process arguments, the environment, and every file the run touched to prove the marker never escaped. You can run it yourself: `bash tests/security-test.sh`.
 
 ## How copying a secret actually works
 
-1. You pick an item and an action. The panel sends the helper only an **opaque item ID** and a **field name** (`username` / `password` / `totp`) — never a value.
+1. You pick an item and an action. The panel sends the helper only an **opaque item ID** and a **field name** (`username` / `password` / `totp`), never a value.
 2. The helper asks `pass-cli` for that one field. The value arrives on a pipe and lives in a single shell variable that is never exported and is erased right after use.
 3. The value is piped to `wl-copy --sensitive`. Omarchy's clipboard history skips anything marked sensitive, so it does not persist there.
-4. After the configured delay, the clipboard is cleared — but **only if it still holds exactly the value we put there.** If you copied something else in the meantime, your newer content is left untouched.
+4. After the configured delay, the clipboard is cleared, but **only if it still holds exactly the value we put there.** If you copied something else in the meantime, your newer content is left untouched.
 
 The value never crosses into the panel/UI layer. The panel only ever handles non-secret metadata: item titles, vault names, and which field you asked for.
 
 ## What it deliberately never does
 
-- Never runs with, stores, or transmits your Proton password — sign-in and unlock happen only in the official CLI, in a terminal you control.
+- Never runs with, stores, or transmits your Proton password, sign-in and unlock happen only in the official CLI, in a terminal you control.
 - Never uses `pass-cli --show-secrets`.
 - Never displays a password, TOTP code, or username on screen.
 - Never writes a secret value to any file, log, notification, or command line.
-- Never bundles, patches, or installs Proton software — it points you at the official installer and gets out of the way.
+- Never bundles, patches, or installs Proton software, it points you at the official installer and gets out of the way.
 
 ## Honest limits
 
 No security tool should overclaim, so here is what this plugin **cannot** protect against, by design:
 
-- **Anything already running as your user.** A program running under your account can already read your `pass-cli` session, your process memory, and your live clipboard. This plugin operates inside that boundary and does not claim to defend it. If your account is compromised, so is your vault — with or without this plugin.
+- **Anything already running as your user.** A program running under your account can already read your `pass-cli` session, your process memory, and your live clipboard. This plugin operates inside that boundary and does not claim to defend it. If your account is compromised, so is your vault, with or without this plugin.
 - **The clipboard while a value is live.** On Wayland, any client of your compositor can read the clipboard while a value sits there. Marking it sensitive keeps it out of clipboard *history*, and the auto-clear shortens the window, but during that window the value is readable by same-user software. Use the shortest clear time you're comfortable with, or clear it manually.
-- **The one-way hash at rest.** To auto-clear safely, the helper keeps a SHA-256 hash of the last copied value in a user-only runtime file. A hash cannot be reversed, but a *low-entropy* value (like a 6-digit TOTP) could be guessed offline from it — by an attacker who, again, already shares your user account and could read the live clipboard anyway. Strong generated passwords are unaffected.
+- **The one-way hash at rest.** To auto-clear safely, the helper keeps a SHA-256 hash of the last copied value in a user-only runtime file. A hash cannot be reversed, but a *low-entropy* value (like a 6-digit TOTP) could be guessed offline from it. That again takes an attacker already on your user account, who could read the live clipboard anyway. Strong generated passwords are unaffected.
 - **Offline access.** Proton enforces session state server-side, so listing and copying require a network connection every time.
 
 ## Reporting a vulnerability
