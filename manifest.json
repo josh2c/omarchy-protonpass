@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "josh2c.protonpass",
   "name": "Proton Pass",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "author": "Josh Garcia",
   "license": "MIT",
   "description": "Quick-access search and copy for Proton Pass logins via the official pass-cli.",
