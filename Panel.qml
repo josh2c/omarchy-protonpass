@@ -54,10 +54,14 @@ Panel {
   // Header actions. Labels and enablement are resolved per frame by the
   // functions below rather than stored here, so the model stays constant and
   // the buttons are never rebuilt mid-interaction.
+  // One icon family at one weight: all four header actions are Material Design
+  // strokes now. fa-plus sat a family apart from its neighbours, and the solid
+  // md-lock carried more filled area than anything beside it, so both read as
+  // louder than the row they belong to.
   readonly property var headerActionSpecs: [
     {icon: "󰑐", action: "refresh", tooltip: "Refresh", name: "Refresh Proton Pass"},
-    {icon: "", action: "create", focusable: true},
-    {icon: "󰌾", action: "lock", tooltip: "Lock Proton Pass", name: "Lock Proton Pass"}
+    {icon: "󰐕", action: "create", focusable: true},
+    {icon: "󰍁", action: "lock", tooltip: "Lock Proton Pass", name: "Lock Proton Pass"}
   ]
 
   function headerActionLabel(spec) {
@@ -111,7 +115,7 @@ Panel {
     ]},
     // The install commands keep the panel open, so Check again is reachable
     // here in a way it is not on the sign-in card.
-    {states: ["MISSING_DEPS"], tone: "setup", card: true, spacing: Style.space(8), blocks: [
+    {states: ["MISSING_DEPS"], tone: "setup", setup: true, spacing: Style.space(8), blocks: [
       {lead: "Set up Proton Pass", bold: true},
       {dim: svc.message},
       {fine: "Requires Pass Plus or Pass Professional."},
@@ -123,24 +127,21 @@ Panel {
       {command: "sudo pacman -S wl-clipboard", name: "Copy wl-clipboard install command"},
       {buttons: [{text: "Check again", action: "recheck"}]}
     ], footer: [
-      {dim: "Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md.",
-       size: Style.font.caption, align: Text.AlignHCenter}
+      {dim: "Secrets are only ever copied to the clipboard, never shown or stored.",
+       size: Style.font.caption}
     ]},
     // One action, not two: launchTerminal() closes the panel on click, and
     // reopening re-checks through Service.onPanelOpened(), so a Check again
     // control on this card could never be reached after a sign-in.
     {states: ["LOGGED_OUT"], when: function() { return !root.sessionExpired },
-     tone: "setup", card: true, spacing: Style.space(8), blocks: [
+     tone: "setup", setup: true, spacing: Style.space(8), blocks: [
       {lead: "Ready to connect", bold: true},
-      {dim: "Sign in opens Proton's own CLI in a terminal — your password and 2FA go straight to Proton, never to this plugin."},
+      {dim: "Sign in opens Proton's own CLI in a terminal. Your password and 2FA go straight to Proton, never to this plugin."},
       {fine: "Requires Pass Plus or Pass Professional."},
       {buttons: [
         {text: "Sign in", icon: "󰍂",
          argv: ["omarchy", "launch", "terminal", "pass-cli", "login"]}
       ]}
-    ], footer: [
-      {dim: "Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md.",
-       size: Style.font.caption, align: Text.AlignHCenter}
     ]},
     {states: ["LOGGED_OUT"], tone: "fault", spacing: Style.space(10), blocks: [
       {lead: svc.message},
@@ -606,7 +607,7 @@ Panel {
           Row {
             id: headerActions
             visible: svc.state === "READY"
-            spacing: Style.space(2)
+            spacing: Style.space(6)
 
             Repeater {
               model: root.headerActionSpecs
@@ -623,18 +624,36 @@ Panel {
                 onClicked: root.runHeaderAction(modelData)
               }
             }
+            // At rest this is an icon like the three actions beside it, so it
+            // stops holding the width of words it is not showing. Arming it
+            // spells the words out in the alarm colour: the row reflows at
+            // exactly the moment a destructive action is armed, which is the
+            // one moment that deserves the user's eye. The label is never
+            // dropped from the tooltip or the accessible name, so the icon is
+            // not the only thing naming it.
             Button {
-              property real reservedWidth: 0
-              onImplicitWidthChanged: reservedWidth = Math.max(reservedWidth, implicitWidth)
-              width: Math.max(reservedWidth, implicitWidth)
-              text: svc.logoutBusy ? "Logging out…" : (root.logoutArmed ? "Confirm log out" : "Log out")
+              readonly property string label: svc.logoutBusy ? "Logging out…"
+                : (root.logoutArmed ? "Confirm log out" : "Log out")
+              // Its three neighbours are PanelActionButtons pinned to a square
+              // slot. Sizing this one from content instead put it off that grid
+              // -- wider and taller than the row it sits in -- so it borrows the
+              // same slot expression and only leaves it when the words appear.
+              readonly property real slot: Math.max(Style.space(22),
+                iconSize + Style.spacing.sm * 2)
+              readonly property bool expanded: svc.logoutBusy || root.logoutArmed
+              iconText: "󰍃"
+              text: expanded ? label : ""
+              tooltipText: label
               enabled: !svc.logoutBusy
               foreground: root.logoutArmed ? root.urgent : root.foreground
               fontFamily: root.fontFamily
               fontSize: Style.font.caption
-              verticalPadding: Style.spacing.controlPaddingY
+              width: expanded ? implicitWidth : slot
+              height: slot
+              horizontalPadding: expanded ? Style.spacing.controlPaddingX : 0
+              verticalPadding: 0
               Accessible.role: Accessible.Button
-              Accessible.name: text
+              Accessible.name: label
               onClicked: root.requestLogout()
             }
           }
@@ -1089,60 +1108,40 @@ Panel {
           Column {
             id: stateView
             readonly property var view: root.activeStateView
-            // A setup state reads as a card: the same block list on a bordered
-            // surface, with its trust footer outside the card. A fault state
-            // instantiates no surface at all, so its item tree is exactly what
-            // it was before the card existed.
-            readonly property bool carded: view !== null && view.card === true
+            // A setup state lays out flush against the panel: no surface of its
+            // own, because the panel is already a bordered surface and a second
+            // frame inside it reads as a box in a box. What separates it from a
+            // fault view is alignment, rhythm, a real bordered action, and a
+            // ruled-off trust footer.
+            readonly property bool setupLayout: view !== null && view.setup === true
             visible: view !== null
             width: parent.width
             spacing: view ? view.spacing : 0
 
-            Item {
-              id: stateBody
-              readonly property real pad: stateView.carded ? Style.space(12) : 0
-              width: parent.width
-              implicitHeight: blockColumn.implicitHeight + pad * 2
+            Repeater {
+              model: stateView.view ? stateView.view.blocks : []
 
-              Loader {
-                anchors.fill: parent
-                active: stateView.carded
-
-                sourceComponent: BorderSurface {
-                  radius: Style.cornerRadius
-                  color: Style.normalFillFor(root.foreground, Color.accent)
-                  borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
-                }
-              }
-
-              Column {
-                id: blockColumn
-                x: stateBody.pad
-                y: stateBody.pad
-                width: parent.width - stateBody.pad * 2
-                spacing: stateView.view ? stateView.view.spacing : 0
-
-                Repeater {
-                  model: stateView.view ? stateView.view.blocks : []
-
-                  delegate: Loader {
-                    id: blockLoader
-                    required property var modelData
-                    // No explicit height: the Loader adopts the block's implicitHeight
-                    // and resizes the block to match. Binding height to
-                    // item.implicitHeight instead makes the two chase each other.
-                    width: parent.width
-                    sourceComponent: modelData.command !== undefined
-                      ? commandBlock
-                      : (modelData.buttons !== undefined ? buttonsBlock : textBlock)
-                    onLoaded: item.spec = blockLoader.modelData
-                  }
-                }
+              delegate: Loader {
+                id: blockLoader
+                required property var modelData
+                // No explicit height: the Loader adopts the block's implicitHeight
+                // and resizes the block to match. Binding height to
+                // item.implicitHeight instead makes the two chase each other.
+                width: parent.width
+                sourceComponent: modelData.command !== undefined
+                  ? commandBlock
+                  : (modelData.buttons !== undefined ? buttonsBlock : textBlock)
+                onLoaded: item.spec = blockLoader.modelData
               }
             }
 
-            // The trust footer sits under the card, not inside it -- it speaks
-            // for the plugin as a whole, not for the step being offered.
+            // The trust footer speaks for the plugin as a whole, not for the
+            // step being offered. It carried a PanelSeparator above it until
+            // that rule was found to stop the enclosing Column positioning at
+            // all -- every child stacked at y=0, which the snapshot harness
+            // rejected as impossible geometry and which would have shipped as a
+            // collapsed dependency card. The footer stands apart on size and
+            // colour instead.
             Repeater {
               model: stateView.view && stateView.view.footer !== undefined
                 ? stateView.view.footer : []
@@ -1182,7 +1181,7 @@ Panel {
                     : (fineTone ? Style.font.caption : Style.font.bodySmall))
                 font.bold: spec.bold === true
                 horizontalAlignment: spec.align !== undefined ? spec.align
-                  : (stateView.carded ? Text.AlignLeft : Text.AlignHCenter)
+                  : (stateView.setupLayout ? Text.AlignLeft : Text.AlignHCenter)
                 wrapMode: spec.wrap !== undefined ? spec.wrap : Text.WordWrap
                 topPadding: spec.topPad !== undefined ? spec.topPad : 0
                 bottomPadding: spec.bottomPad !== undefined ? spec.bottomPad : 0
@@ -1232,12 +1231,12 @@ Panel {
                 property var spec: ({})
                 implicitHeight: stateButtons.implicitHeight
 
-                // A card's action anchors to the card's left edge, under the
-                // text it follows; a fault view keeps its centred button row.
+                // A setup action anchors left, under the text it follows; a
+                // fault view keeps its centred button row.
                 Row {
                   id: stateButtons
-                  anchors.left: stateView.carded ? parent.left : undefined
-                  anchors.horizontalCenter: stateView.carded
+                  anchors.left: stateView.setupLayout ? parent.left : undefined
+                  anchors.horizontalCenter: stateView.setupLayout
                     ? undefined : parent.horizontalCenter
                   spacing: Style.space(8)
 
@@ -1248,6 +1247,9 @@ Panel {
                       required property var modelData
                       text: modelData.text
                       iconText: modelData.icon !== undefined ? modelData.icon : ""
+                      // Outlined at rest so it reads as a control rather than
+                      // as another line of text.
+                      bordered: stateView.setupLayout
                       onClicked: root.runStateAction(modelData)
                     }
                   }

@@ -17,41 +17,38 @@ SNAPSHOT-BEGIN MISSING_DEPS
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
 | QQuickText at=37.39,21 size=360.61x14 text="PROTON PASS CLI NOT FOUND" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| BorderSurface at=0,47 size=398x327 fill=#0ad3c6aa
-| QQuickText at=14,61 size=370x16 text="Set up Proton Pass" color=#e6e6e6 px=12 bold=true align=1 wrap=1
-| QQuickText at=14,87 size=370x15 text="Proton Pass CLI not found" color=#949494 px=11 bold=false align=1 wrap=1
-| QQuickText at=14,112 size=370x30 text="Proton Pass CLI access requires Pass Plus or Pass Professional. Pass Essentials is not eligible." color=#949494 px=11 bold=false align=1 wrap=1
-| BorderSurface at=14,152 size=370x46 fill=#ffffff
-| QQuickText at=23,161 size=322x28 text="curl -fsSL https://proton.me/download/pass-cli/install.sh | bash" color=#e6e6e6 px=10 bold=false align=1 wrap=3
-| PanelActionButton at=354,164 size=22x22 icon="" fill=#00000000 a11y="Copy official installer command"
-| QQuickText at=359,165 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| BorderSurface at=14,208 size=370x32 fill=#ffffff
-| QQuickText at=23,217 size=322x14 text="yay -S proton-pass-cli-bin" color=#e6e6e6 px=10 bold=false align=1 wrap=0
-| PanelActionButton at=354,213 size=22x22 icon="" fill=#00000000 a11y="Copy Arch AUR command"
-| QQuickText at=359,214 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| QQuickText at=14,250 size=370x28 text="Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin." color=#949494 px=10 bold=false align=1 wrap=1
-| BorderSurface at=14,288 size=370x32 fill=#ffffff
-| QQuickText at=23,297 size=322x14 text="sudo pacman -S wl-clipboard" color=#e6e6e6 px=10 bold=false align=1 wrap=0
-| PanelActionButton at=354,293 size=22x22 icon="" fill=#00000000 a11y="Copy wl-clipboard install command"
-| QQuickText at=359,294 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=148,330 size=101.06x30 text="Check again" fill=#00000000
-| QQuickText at=159,337 size=79.06x16 text="Check again" color=#d3c6aa px=12 bold=false align=1 wrap=0
-| QQuickText at=0,384 size=398x28 text="Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md." color=#949494 px=10 bold=false align=4 wrap=1
-| QQuickRectangle at=390,49 size=6x361 fill=#383838
+| QQuickText at=0,47 size=398x16 text="Set up Proton Pass" color=#e6e6e6 px=12 bold=true align=1 wrap=1
+| QQuickText at=0,71 size=398x15 text="Proton Pass CLI not found" color=#949494 px=11 bold=false align=1 wrap=1
+| QQuickText at=0,94 size=398x14 text="Requires Pass Plus or Pass Professional." color=#797979 px=10 bold=false align=1 wrap=1
+| BorderSurface at=0,116 size=398x46 fill=#ffffff
+| QQuickText at=9,125 size=350x28 text="curl -fsSL https://proton.me/download/pass-cli/install.sh | bash" color=#e6e6e6 px=10 bold=false align=1 wrap=3
+| PanelActionButton at=368,128 size=22x22 icon="" fill=#00000000 a11y="Copy official installer command"
+| QQuickText at=373,129 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| BorderSurface at=0,170 size=398x32 fill=#ffffff
+| QQuickText at=9,179 size=350x14 text="yay -S proton-pass-cli-bin" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=368,175 size=22x22 icon="" fill=#00000000 a11y="Copy Arch AUR command"
+| QQuickText at=373,176 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| QQuickText at=0,210 size=398x28 text="Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin." color=#949494 px=10 bold=false align=1 wrap=1
+| BorderSurface at=0,246 size=398x32 fill=#ffffff
+| QQuickText at=9,255 size=350x14 text="sudo pacman -S wl-clipboard" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| PanelActionButton at=368,251 size=22x22 icon="" fill=#00000000 a11y="Copy wl-clipboard install command"
+| QQuickText at=373,252 size=12.39x19 text="" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=0,286 size=101.06x30 text="Check again" fill=#00000000
+| QQuickText at=11,293 size=79.06x16 text="Check again" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickText at=0,324 size=398x28 text="Secrets are only ever copied to the clipboard, never shown or stored." color=#949494 px=10 bold=false align=1 wrap=1
+| QQuickRectangle at=390,49 size=6x301 fill=#383838
 SNAPSHOT-END MISSING_DEPS
 SNAPSHOT-BEGIN LOGGED_OUT_FIRST_RUN
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
 | QQuickText at=37.39,21 size=360.61x14 text="NOT SIGNED IN TO PROTON PASS" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| BorderSurface at=0,47 size=398x197 fill=#0ad3c6aa
-| QQuickText at=14,61 size=370x16 text="Ready to connect" color=#e6e6e6 px=12 bold=true align=1 wrap=1
-| QQuickText at=14,87 size=370x45 text="Sign in opens Proton's own CLI in a terminal. Your Proton password and 2FA go directly to Proton — this plugin never sees them." color=#949494 px=11 bold=false align=1 wrap=1
-| QQuickText at=14,142 size=370x45 text="Sign-in requires a plan with CLI access (Pass Plus or Pass Professional) — an eligibility error appears in the sign-in terminal otherwise." color=#949494 px=11 bold=false align=1 wrap=1
-| Button at=153,197 size=91.7x33 text="Sign in" icon="󰍂" fill=#00000000
-| QQuickText at=164,204 size=11.39x19 text="󰍂" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| QQuickText at=183.39,206 size=50.31x16 text="Sign in" color=#d3c6aa px=12 bold=false align=1 wrap=0
-| QQuickText at=0,254 size=398x28 text="Secrets are only ever copied to the clipboard, never shown or stored. See SECURITY.md." color=#949494 px=10 bold=false align=4 wrap=1
-| QQuickRectangle at=390,49 size=6x231 fill=#383838
+| QQuickText at=0,47 size=398x16 text="Ready to connect" color=#e6e6e6 px=12 bold=true align=1 wrap=1
+| QQuickText at=0,71 size=398x30 text="Sign in opens Proton's own CLI in a terminal. Your password and 2FA go straight to Proton, never to this plugin." color=#949494 px=11 bold=false align=1 wrap=1
+| QQuickText at=0,109 size=398x14 text="Requires Pass Plus or Pass Professional." color=#797979 px=10 bold=false align=1 wrap=1
+| Button at=0,131 size=91.7x33 text="Sign in" icon="󰍂" fill=#00000000
+| QQuickText at=11,138 size=11.39x19 text="󰍂" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| QQuickText at=30.39,140 size=50.31x16 text="Sign in" color=#d3c6aa px=12 bold=false align=1 wrap=0
+| QQuickRectangle at=390,49 size=6x113 fill=#383838
 SNAPSHOT-END LOGGED_OUT_FIRST_RUN
 SNAPSHOT-BEGIN LOGGED_OUT_EXPIRED
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
@@ -97,15 +94,15 @@ SNAPSHOT-END ERROR
 SNAPSHOT-BEGIN READY_EMPTY
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=212.61x14 text="0 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
-| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
-| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
-| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
-| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
-| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickText at=37.39,21 size=242.61x14 text="0 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=292,7 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=298,8 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=320,7 size=22x22 icon="󰐕" fill=#00000000 a11y="Create login"
+| QQuickText at=326,8 size=9.39x19 text="󰐕" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=348,7 size=22x22 icon="󰍁" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=354,8 size=10.39x19 text="󰍁" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=376,7 size=22x22 icon="󰍃" fill=#00000000 a11y="Log out"
+| QQuickText at=381,8 size=11.39x19 text="󰍃" color=#e6e6e6 px=14 bold=false align=1 wrap=0
 | QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
 | BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
 | QQuickText at=0,91 size=398x72 text="No login items found" color=#949494 px=12 bold=false align=4 wrap=1
@@ -115,15 +112,15 @@ SNAPSHOT-END READY_EMPTY
 SNAPSHOT-BEGIN READY_ITEMS
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
-| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
-| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
-| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
-| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
-| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickText at=37.39,21 size=242.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=292,7 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=298,8 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=320,7 size=22x22 icon="󰐕" fill=#00000000 a11y="Create login"
+| QQuickText at=326,8 size=9.39x19 text="󰐕" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=348,7 size=22x22 icon="󰍁" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=354,8 size=10.39x19 text="󰍁" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=376,7 size=22x22 icon="󰍃" fill=#00000000 a11y="Log out"
+| QQuickText at=381,8 size=11.39x19 text="󰍃" color=#e6e6e6 px=14 bold=false align=1 wrap=0
 | QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
 | BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
 | PanelSectionHeader at=0,91 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
@@ -160,15 +157,15 @@ SNAPSHOT-END READY_ITEMS
 SNAPSHOT-BEGIN READY_RECENTS
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
-| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
-| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
-| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
-| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
-| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickText at=37.39,21 size=242.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=292,7 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=298,8 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=320,7 size=22x22 icon="󰐕" fill=#00000000 a11y="Create login"
+| QQuickText at=326,8 size=9.39x19 text="󰐕" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=348,7 size=22x22 icon="󰍁" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=354,8 size=10.39x19 text="󰍁" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=376,7 size=22x22 icon="󰍃" fill=#00000000 a11y="Log out"
+| QQuickText at=381,8 size=11.39x19 text="󰍃" color=#e6e6e6 px=14 bold=false align=1 wrap=0
 | QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
 | BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
 | PanelSectionHeader at=0,91 size=398x22 text="Recent" color=#a4a4a4 px=10 bold=true align=1 wrap=0
@@ -215,15 +212,15 @@ SNAPSHOT-END READY_RECENTS
 SNAPSHOT-BEGIN READY_NO_MATCHES
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
-| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
-| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
-| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
-| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
-| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickText at=37.39,21 size=242.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=292,7 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=298,8 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=320,7 size=22x22 icon="󰐕" fill=#00000000 a11y="Create login"
+| QQuickText at=326,8 size=9.39x19 text="󰐕" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=348,7 size=22x22 icon="󰍁" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=354,8 size=10.39x19 text="󰍁" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=376,7 size=22x22 icon="󰍃" fill=#00000000 a11y="Log out"
+| QQuickText at=381,8 size=11.39x19 text="󰍃" color=#e6e6e6 px=14 bold=false align=1 wrap=0
 | QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
 | BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
 | QQuickText at=0,91 size=398x72 text="No matches" color=#949494 px=12 bold=false align=4 wrap=0
@@ -233,15 +230,15 @@ SNAPSHOT-END READY_NO_MATCHES
 SNAPSHOT-BEGIN READY_COPY_PENDING
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
-| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
-| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
-| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
-| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
-| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickText at=37.39,21 size=242.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=292,7 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=298,8 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=320,7 size=22x22 icon="󰐕" fill=#00000000 a11y="Create login"
+| QQuickText at=326,8 size=9.39x19 text="󰐕" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=348,7 size=22x22 icon="󰍁" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=354,8 size=10.39x19 text="󰍁" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=376,7 size=22x22 icon="󰍃" fill=#00000000 a11y="Log out"
+| QQuickText at=381,8 size=11.39x19 text="󰍃" color=#e6e6e6 px=14 bold=false align=1 wrap=0
 | QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
 | BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
 | PanelSectionHeader at=0,91 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
@@ -280,15 +277,15 @@ SNAPSHOT-END READY_COPY_PENDING
 SNAPSHOT-BEGIN READY_TOAST
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
-| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
-| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
-| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
-| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
-| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickText at=37.39,21 size=242.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=292,7 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=298,8 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=320,7 size=22x22 icon="󰐕" fill=#00000000 a11y="Create login"
+| QQuickText at=326,8 size=9.39x19 text="󰐕" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=348,7 size=22x22 icon="󰍁" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=354,8 size=10.39x19 text="󰍁" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=376,7 size=22x22 icon="󰍃" fill=#00000000 a11y="Log out"
+| QQuickText at=381,8 size=11.39x19 text="󰍃" color=#e6e6e6 px=14 bold=false align=1 wrap=0
 | QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
 | BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
 | PanelSectionHeader at=0,91 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
@@ -327,15 +324,15 @@ SNAPSHOT-END READY_TOAST
 SNAPSHOT-BEGIN READY_CREATED_TOAST
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
-| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
-| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
-| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
-| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
-| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickText at=37.39,21 size=242.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=292,7 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=298,8 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=320,7 size=22x22 icon="󰐕" fill=#00000000 a11y="Create login"
+| QQuickText at=326,8 size=9.39x19 text="󰐕" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=348,7 size=22x22 icon="󰍁" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=354,8 size=10.39x19 text="󰍁" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=376,7 size=22x22 icon="󰍃" fill=#00000000 a11y="Log out"
+| QQuickText at=381,8 size=11.39x19 text="󰍃" color=#e6e6e6 px=14 bold=false align=1 wrap=0
 | QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
 | BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
 | PanelSectionHeader at=0,91 size=398x16 text="All" color=#a4a4a4 px=10 bold=true align=1 wrap=0
@@ -376,15 +373,15 @@ SNAPSHOT-END READY_CREATED_TOAST
 SNAPSHOT-BEGIN READY_WARNING
 | QQuickText at=0,2 size=23.39x32 text="󰌆" color=#e6e6e6 px=24 bold=false align=4 wrap=0
 | QQuickText at=37.39,0 size=92.3x19 text="Proton Pass" color=#e6e6e6 px=14 bold=true align=1 wrap=0
-| QQuickText at=37.39,21 size=212.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
-| PanelActionButton at=262,4 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
-| QQuickText at=268,5 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| PanelActionButton at=286,4 size=22x22 icon="" fill=#00000000 a11y="Create login"
-| QQuickText at=291,5 size=11.39x19 text="" color=#696355 px=14 bold=false align=1 wrap=0
-| PanelActionButton at=310,4 size=22x22 icon="󰌾" fill=#00000000 a11y="Lock Proton Pass"
-| QQuickText at=316,5 size=10.39x19 text="󰌾" color=#d3c6aa px=14 bold=false align=1 wrap=0
-| Button at=334,4 size=64x28 text="Log out" fill=#00000000 a11y="Log out"
-| QQuickText at=345,11 size=42x14 text="Log out" color=#e6e6e6 px=10 bold=false align=1 wrap=0
+| QQuickText at=37.39,21 size=242.61x14 text="3 LOGINS · SYNCING" color=#a4a4a4 px=10 bold=true align=1 wrap=0
+| PanelActionButton at=292,7 size=22x22 icon="󰑐" fill=#00000000 a11y="Refresh Proton Pass"
+| QQuickText at=298,8 size=10.39x19 text="󰑐" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| PanelActionButton at=320,7 size=22x22 icon="󰐕" fill=#00000000 a11y="Create login"
+| QQuickText at=326,8 size=9.39x19 text="󰐕" color=#696355 px=14 bold=false align=1 wrap=0
+| PanelActionButton at=348,7 size=22x22 icon="󰍁" fill=#00000000 a11y="Lock Proton Pass"
+| QQuickText at=354,8 size=10.39x19 text="󰍁" color=#d3c6aa px=14 bold=false align=1 wrap=0
+| Button at=376,7 size=22x22 icon="󰍃" fill=#00000000 a11y="Log out"
+| QQuickText at=381,8 size=11.39x19 text="󰍃" color=#e6e6e6 px=14 bold=false align=1 wrap=0
 | QQuickPlaceholderText at=11,55 size=376x16 text="Search logins and vaults…" color=#909090 px=12 bold=false align=1 wrap=0
 | BorderSurface at=0,47 size=398x32 fill=#0ad3c6aa
 | BorderSurface at=0,91 size=398x33 fill=#14ff5555
