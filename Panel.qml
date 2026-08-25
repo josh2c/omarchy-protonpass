@@ -119,10 +119,10 @@ Panel {
       {lead: "Set up Proton Pass", bold: true},
       {dim: svc.message},
       {fine: "Requires Pass Plus or Pass Professional."},
-      {command: "curl -fsSL https://proton.me/download/pass-cli/install.sh | bash",
-       name: "Copy official installer command", wrap: Text.WrapAnywhere},
       {command: "yay -S proton-pass-cli-bin", name: "Copy Arch AUR command"},
       {dim: "Arch note: the AUR package named pass-cli is unrelated. Use proton-pass-cli-bin.",
+       size: Style.font.caption, align: Text.AlignLeft},
+      {dim: "Other distributions: see protonpass.github.io/pass-cli for official packages.",
        size: Style.font.caption, align: Text.AlignLeft},
       {command: "sudo pacman -S wl-clipboard", name: "Copy wl-clipboard install command"},
       {buttons: [{text: "Check again", action: "recheck"}]}

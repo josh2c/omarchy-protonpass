@@ -11,10 +11,10 @@ This plugin copies passwords and two-factor codes. You are right to be careful a
 
 ## Verify it yourself
 
-The entire runtime is four files (one Bash helper, two QML files, one small JavaScript file), about 3,300 lines you can read. Run these from the plugin directory:
+The entire runtime is four files (one Bash helper, two QML files, one small JavaScript file), about 3,400 lines you can read. Run these from the plugin directory:
 
 ```sh
-# No network code. The only hit is a help-text string showing you the installer command.
+# No network code. This returns nothing at all.
 grep -rnE 'curl|wget|http|nc |socket|XMLHttpRequest' *.qml Keybinds.js omarchy-protonpass
 
 # Secrets are never revealed: the only hits for --show-secrets are this

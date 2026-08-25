@@ -41,17 +41,15 @@ Editing, deleting, sharing, attachments, custom-password creation, secret displa
 
 ## Install
 
-1. Install Proton's official CLI if needed:
-
-   ```bash
-   curl -fsSL https://proton.me/download/pass-cli/install.sh | bash
-   ```
-
-   On Arch, the community package is `proton-pass-cli-bin`:
+1. Install Proton's official CLI if needed. On Arch, the community package is
+   `proton-pass-cli-bin`:
 
    ```bash
    yay -S proton-pass-cli-bin
    ```
+
+   On other distributions, see Proton's [`pass-cli` documentation](https://protonpass.github.io/pass-cli/)
+   for official packages.
 
    > [!WARNING]
    > The AUR package named `pass-cli` is an unrelated project. Do not install it for this plugin.
