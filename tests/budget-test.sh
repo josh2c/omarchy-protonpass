@@ -10,7 +10,7 @@
 # Offline and account-free like the rest of the suite: the hostile CLI is a
 # generator, so a bound can move without regenerating a fixture.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 ROOT=$(pwd)
 HELPER="$ROOT/omarchy-protonpass"
 
