@@ -30,6 +30,8 @@ Item {
     readonly property var filteredItems: filterItems(items, query)
     readonly property bool showRecents: boolSetting("showRecents", true)
     readonly property var recentItems: joinRecents(items, recents)
+    readonly property int maxIndexItems: 10000
+    readonly property int maxIndexVaults: 100
     readonly property bool displayingRecents: showRecents && query === "" && recentItems.length > 0
     // Rows are the item objects themselves. Nothing is precomputed into them:
     // the subtitle and the cursor index are derived in the delegate, so typing
@@ -223,6 +225,12 @@ Item {
                 return null;
         } else if (expectedCommand === "index") {
             if (!Array.isArray(data.items) || !Array.isArray(data.vaults) || !_isStringArray(data.warnings))
+                return null;
+            // The helper enforces these; the panel refuses them independently.
+            // The helper is a separate process on PATH, so trusting its output
+            // to be bounded would make the shared shell's memory depend on a
+            // file we do not own.
+            if (data.items.length > root.maxIndexItems || data.vaults.length > root.maxIndexVaults)
                 return null;
             for (var i = 0; i < data.items.length; i++) {
                 var item = data.items[i];

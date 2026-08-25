@@ -15,6 +15,17 @@ readonly RECENTS_LIMIT=8
 # unbounded, so the index truncates them for display rather than rejecting the
 # item — one hostile entry must not hide the rest of a legitimate vault.
 readonly INDEX_DISPLAY_TEXT_LIMIT=256
+# Resource budget for the index path. Item metadata is authored by whoever can
+# edit a vault, and an accepted shared vault means that is not always the user.
+# pass-cli is a trusted channel; what arrives over it is not trusted data, so
+# every dimension of it is bounded: how many vaults, how many items, how many
+# bytes per response, and how long the whole walk may take. Titles and vault
+# names are already capped above; these cap the counts and the aggregate work.
+readonly INDEX_MAX_VAULTS=100
+readonly INDEX_MAX_ITEMS_PER_VAULT=5000
+readonly INDEX_MAX_ITEMS_TOTAL=10000
+readonly INDEX_MAX_RESPONSE_BYTES=10485760
+readonly INDEX_DEADLINE_SECONDS=60
 
 emit_doctor() {
   local state=$1 message=$2 pass_present=$3 version=$4 clipboard_present=$5
@@ -36,10 +47,13 @@ emit_doctor() {
 
 emit_index() {
   local state=$1 message=$2 items=$3 warnings=$4 vaults=$5
-  jq -cn \
+  # The item array arrives on stdin, never as an argument. Linux caps a single
+  # argument at MAX_ARG_STRLEN (32 pages, 128 KiB), which an index of a few
+  # hundred logins exceeds on its own -- no hostile vault required. Warnings and
+  # vaults stay on argv: both are bounded by INDEX_MAX_VAULTS and short strings.
+  printf '%s' "$items" | jq -c \
     --arg state "$state" \
     --arg message "$message" \
-    --argjson items "$items" \
     --argjson warnings "$warnings" \
     --argjson vaults "$vaults" \
     '{
@@ -47,7 +61,7 @@ emit_index() {
       command: "index",
       state: $state,
       message: $message,
-      items: $items,
+      items: .,
       warnings: $warnings,
       vaults: $vaults
     }'
@@ -144,6 +158,19 @@ run_pass_cli() {
 # A plain redirect cannot block; a pipe reader waiting for end-of-file can,
 # because any descendant the CLI leaves behind keeps the write end open.
 STDERR_CAPTURE_FILE=""
+INDEX_SCRATCH_FILE=""
+# Set by callers that read attacker-influenced list output; 0 means no cap.
+CAPTURE_MAX_BYTES=0
+CAPTURE_WAS_TRUNCATED=false
+# The residue contract (tests/security-test.sh) allows exactly one file to
+# outlive the helper in the runtime directory, the clipboard hash. Both scratch
+# files are removed on every exit path by this single trap; a second trap would
+# silently replace the first.
+remove_scratch_files() {
+  [[ -n $STDERR_CAPTURE_FILE ]] && rm -f -- "$STDERR_CAPTURE_FILE"
+  [[ -n $INDEX_SCRATCH_FILE ]] && rm -f -- "$INDEX_SCRATCH_FILE"
+  return 0
+}
 
 open_stderr_capture() {
   local directory=${XDG_RUNTIME_DIR:-} path created=false noclobber_was_set=false
@@ -171,7 +198,23 @@ open_stderr_capture() {
     path=$(mktemp "$directory/.omarchy-protonpass.stderr.XXXXXX") || return 1
   fi
   STDERR_CAPTURE_FILE=$path
-  trap 'rm -f -- "$STDERR_CAPTURE_FILE"' EXIT
+  trap remove_scratch_files EXIT
+}
+
+open_index_scratch() {
+  local directory=${XDG_RUNTIME_DIR:-} path
+  if [[ -n $INDEX_SCRATCH_FILE ]]; then
+    : >"$INDEX_SCRATCH_FILE" || return 1
+    return 0
+  fi
+  if [[ -z $directory || ! -d $directory || -L $directory ]]; then
+    directory=${TMPDIR:-/tmp}
+  fi
+  [[ -d $directory && ! -L $directory ]] || return 1
+  umask 077
+  path=$(mktemp "$directory/.omarchy-protonpass.index.XXXXXX") || return 1
+  INDEX_SCRATCH_FILE=$path
+  trap remove_scratch_files EXIT
 }
 
 # The three namerefs are output parameters consumed by callers. With
@@ -206,7 +249,25 @@ run_pass_cli_captured() {
     captured_stdout=${captured_stdout%x}
     captured_stdout=${captured_stdout%$'\n'}
   else
-    if captured_stdout=$(run_pass_cli "$timeout_seconds" "$@" 2>"$stderr_target"); then
+    # A list response is attacker-influenced in size, so it is truncated at the
+    # read rather than after it lands in a variable. Truncated JSON fails the
+    # caller's contract check, which is the intended fail-closed path;
+    # CAPTURE_WAS_TRUNCATED lets the caller say why.
+    CAPTURE_WAS_TRUNCATED=false
+    if (( CAPTURE_MAX_BYTES > 0 )); then
+      if captured_stdout=$(
+        run_pass_cli "$timeout_seconds" "$@" 2>"$stderr_target" \
+          | head -c "$CAPTURE_MAX_BYTES"
+        exit "${PIPESTATUS[0]}"
+      ); then
+        captured_status=0
+      else
+        captured_status=$?
+      fi
+      if (( ${#captured_stdout} >= CAPTURE_MAX_BYTES )); then
+        CAPTURE_WAS_TRUNCATED=true
+      fi
+    elif captured_stdout=$(run_pass_cli "$timeout_seconds" "$@" 2>"$stderr_target"); then
       captured_status=0
     else
       captured_status=$?
@@ -678,12 +739,15 @@ clear_recents_data() {
 index_command() {
   local vault_stdout="" vault_stderr="" vaults="[]" contract_vaults="[]" items="[]" warnings="[]"
   local vault_status=0 vault_json share_id item_stdout item_stderr item_status mapped
+  local deadline_epoch remaining vault_timeout vault_total vaults_walked=0 items_total=0 mapped_count
 
   if ! command -v pass-cli >/dev/null 2>&1; then
     fail_classified index 127 ""
     return 0
   fi
 
+  deadline_epoch=$(( $(date +%s) + INDEX_DEADLINE_SECONDS ))
+  CAPTURE_MAX_BYTES=$INDEX_MAX_RESPONSE_BYTES
   run_pass_cli_captured false vault_stdout vault_stderr vault_status \
     "$INDEX_TIMEOUT_SECONDS" vault list --output json
   if (( vault_status != 0 )); then
@@ -709,13 +773,46 @@ index_command() {
     ($excluded | split(",") | map(trim) | map(select(length > 0))) as $excludedNames
     | [.vaults[] | select(.name as $name | ($excludedNames | index($name) | not))]
   ' <<<"$vault_stdout")
+  vault_total=$(jq 'length' <<<"$vaults")
+  if (( vault_total > INDEX_MAX_VAULTS )); then
+    vaults=$(jq -c --argjson limit "$INDEX_MAX_VAULTS" '.[0:$limit]' <<<"$vaults")
+    warnings=$(jq -cn --argjson warnings "$warnings" --argjson limit "$INDEX_MAX_VAULTS" \
+      '$warnings + ["Only the first \($limit) vaults were indexed"]')
+  fi
+
   contract_vaults=$(jq -c --argjson limit "$INDEX_DISPLAY_TEXT_LIMIT" \
     '[.[] | {shareId: .share_id, name: (.name[0:$limit])}]' <<<"$vaults")
 
+  if ! open_index_scratch; then
+    emit_index error "Something went wrong talking to pass-cli" '[]' '[]' '[]'
+    return 0
+  fi
+
   while IFS= read -r vault_json; do
+    # One deadline governs the whole walk. Per-request timeouts do not compose:
+    # N vaults at INDEX_TIMEOUT_SECONDS each is N times the bound, which is no
+    # bound at all when N is attacker-chosen.
+    remaining=$(( deadline_epoch - $(date +%s) ))
+    if (( remaining <= 0 )); then
+      warnings=$(jq -cn --argjson warnings "$warnings" \
+        '$warnings + ["Indexing stopped at the time limit; some vaults were skipped"]')
+      break
+    fi
+    if (( items_total >= INDEX_MAX_ITEMS_TOTAL )); then
+      warnings=$(jq -cn --argjson warnings "$warnings" --argjson limit "$INDEX_MAX_ITEMS_TOTAL" \
+        '$warnings + ["Some items were not indexed (limit \($limit) reached)"]')
+      break
+    fi
+    vault_timeout=$INDEX_TIMEOUT_SECONDS
+    if (( remaining < vault_timeout )); then
+      vault_timeout=$remaining
+    fi
+    vaults_walked=$(( vaults_walked + 1 ))
+
     share_id=$(jq -r '.share_id' <<<"$vault_json")
+    CAPTURE_MAX_BYTES=$INDEX_MAX_RESPONSE_BYTES
     run_pass_cli_captured false item_stdout item_stderr item_status \
-      "$INDEX_TIMEOUT_SECONDS" item list \
+      "$vault_timeout" item list \
       --share-id "$share_id" \
       --filter-type login \
       --filter-state active \
@@ -734,13 +831,22 @@ index_command() {
           (.create_time | type) == "string"
         )
       ' <<<"$item_stdout" >/dev/null 2>&1; then
-      warnings=$(jq -cn --argjson warnings "$warnings" \
-        '$warnings + ["A vault could not be loaded"]')
+      if [[ $CAPTURE_WAS_TRUNCATED == true ]]; then
+        warnings=$(jq -cn --argjson warnings "$warnings" \
+          '$warnings + ["A vault was too large to index"]')
+      else
+        warnings=$(jq -cn --argjson warnings "$warnings" \
+          '$warnings + ["A vault could not be loaded"]')
+      fi
       continue
     fi
 
+    # Two ceilings apply per vault: its own item cap, and whatever remains of
+    # the global one. jq applies both in a single pass.
     mapped=$(jq -c --argjson vault "$vault_json" \
-      --argjson limit "$INDEX_DISPLAY_TEXT_LIMIT" '[
+      --argjson limit "$INDEX_DISPLAY_TEXT_LIMIT" \
+      --argjson perVault "$INDEX_MAX_ITEMS_PER_VAULT" \
+      --argjson remaining "$(( INDEX_MAX_ITEMS_TOTAL - items_total ))" '[
       .items[] | {
         itemId: .id,
         shareId: .share_id,
@@ -748,9 +854,23 @@ index_command() {
         title: (.title[0:$limit]),
         createTime: .create_time
       }
-    ]' <<<"$item_stdout")
-    items=$(jq -cn --argjson items "$items" --argjson mapped "$mapped" '$items + $mapped')
+    ] | .[0:(if $perVault < $remaining then $perVault else $remaining end)]' <<<"$item_stdout")
+    mapped_count=$(jq 'length' <<<"$mapped")
+    if (( mapped_count < $(jq '.items | length' <<<"$item_stdout") )); then
+      warnings=$(jq -cn --argjson warnings "$warnings" \
+        '$warnings + ["A vault held more logins than the index holds"]')
+    fi
+    items_total=$(( items_total + mapped_count ))
+    # One line per vault, collapsed once after the walk. Concatenating the whole
+    # accumulated array per vault re-serialises everything already gathered,
+    # which is quadratic in the number of items an attacker supplies.
+    printf '%s\n' "$mapped" >>"$INDEX_SCRATCH_FILE" || break
   done < <(jq -c '.[]' <<<"$vaults")
+
+  CAPTURE_MAX_BYTES=0
+  items=$(jq -cs 'add // []' "$INDEX_SCRATCH_FILE") || items='[]'
+  : >"$INDEX_SCRATCH_FILE"
+  : "$vaults_walked"
 
   if [[ $warnings == '[]' ]]; then
     emit_index ready "Login items ready" "$items" "$warnings" "$contract_vaults"

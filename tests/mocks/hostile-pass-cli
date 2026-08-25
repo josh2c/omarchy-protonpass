@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# A pass-cli that answers like an attacker who can edit a vault the user has
+# accepted. Nothing here is a fixture on disk: 50,000 items would bloat the
+# repo and a checked-in blob cannot be scaled when a bound moves. The shapes are
+# generated on demand and are structurally valid, so they pass every contract
+# check the helper applies -- the only thing wrong with them is their size.
+#
+# HOSTILE_CASE selects the shape:
+#   vaults      -- more vaults than INDEX_MAX_VAULTS
+#   items       -- more items in one vault than INDEX_MAX_ITEMS_PER_VAULT
+#   flood       -- enough items across enough vaults to pass INDEX_MAX_ITEMS_TOTAL
+#   giant       -- a single response larger than INDEX_MAX_RESPONSE_BYTES
+#   slow        -- every vault stalls, to exercise the aggregate deadline
+set -euo pipefail
+
+case_name=${HOSTILE_CASE:-items}
+vault_count=${HOSTILE_VAULTS:-200}
+item_count=${HOSTILE_ITEMS:-12000}
+stall_seconds=${HOSTILE_STALL:-3}
+
+# 88 characters, matching the real id length recorded in PLAN.md, so the
+# helper's id allowlist regex is exercised at realistic width.
+id_of() { printf 'i%087d' "$1"; }
+
+arg_value() {
+  local wanted=$1; shift
+  while (( $# > 0 )); do
+    if [[ $1 == "$wanted" && $# -gt 1 ]]; then printf '%s' "$2"; return 0; fi
+    shift
+  done
+  return 1
+}
+
+emit_vaults() {
+  local n=$1 i
+  printf '{"vaults":['
+  for (( i = 0; i < n; i++ )); do
+    (( i > 0 )) && printf ','
+    printf '{"share_id":"%s","name":"vault-%d"}' "$(id_of "$i")" "$i"
+  done
+  printf ']}\n'
+}
+
+emit_items() {
+  local n=$1 share=$2 i title
+  # Long enough to exercise INDEX_DISPLAY_TEXT_LIMIT, short enough that the
+  # count caps are reached before the byte cap. The giant case tests the byte
+  # cap on its own.
+  title=$(printf 'T%.0s' $(seq 1 300))
+  printf '{"items":['
+  for (( i = 0; i < n; i++ )); do
+    (( i > 0 )) && printf ','
+    printf '{"id":"%s","share_id":"%s","title":"%s-%d","create_time":"2026-01-05T10:00:00"}' \
+      "$(id_of "$i")" "$share" "$title" "$i"
+  done
+  printf ']}\n'
+}
+
+case ${1:-} in
+  vault)
+    case $case_name in
+      vaults|flood|slow) emit_vaults "$vault_count" ;;
+      *)            emit_vaults 1 ;;
+    esac
+    ;;
+  item)
+    share=$(arg_value --share-id "$@") || share=$(id_of 0)
+    case $case_name in
+      slow)  sleep "$stall_seconds"; emit_items 1 "$share" ;;
+      giant) emit_items 200000 "$share" ;;
+      flood) emit_items 1000 "$share" ;;
+      *)     emit_items "$item_count" "$share" ;;
+    esac
+    ;;
+  *)
+    echo "hostile mock: unsupported command ${1:-}" >&2
+    exit 2
+    ;;
+esac
