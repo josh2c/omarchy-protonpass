@@ -11,7 +11,7 @@ This plugin copies passwords and two-factor codes. You are right to be careful a
 
 ## Verify it yourself
 
-The entire runtime is four files (one Bash helper, two QML files, one small JavaScript file), about 3,400 lines you can read. Run these from the plugin directory:
+The entire runtime is four files (one Bash helper, two QML files, one small JavaScript file), about 3,500 lines you can read. Run these from the plugin directory:
 
 ```sh
 # No network code. This returns nothing at all.
@@ -33,6 +33,32 @@ grep -nE 'eval|sh -c|`' omarchy-protonpass Keybinds.js
 ```
 
 And the strongest check is mechanical: `tests/security-test.sh` runs on every commit in CI (offline, with no Proton account). It statically forbids `--show-secrets`, `eval`, `sh -c`, exported secret variables, and secret-shaped UI properties, and it dynamically plants a marker "secret," runs a real copy, and scans process arguments, the environment, and every file the run touched to prove the marker never escaped. You can run it yourself: `bash tests/security-test.sh`.
+
+## Scope and limits
+
+What this document defends, and what it does not.
+
+**Assets.** Your field values (passwords, usernames, TOTP codes); your Proton
+session; the clipboard; and the availability of the Omarchy shell process the
+panel runs inside.
+
+**Adversaries.** A local unprivileged process on your machine reading arguments,
+environment, or files. An editor of a vault you have accepted a share of, who
+authors the item metadata this plugin reads. Anyone who can read your clipboard
+history.
+
+**Explicitly out of scope.** A compromised Proton account or `pass-cli` binary;
+a compromised Omarchy shell; a privileged local attacker who can read another
+process's memory; and physical access to an unlocked session. Nothing here
+defends against those, and no plugin can.
+
+**A note on shared vaults.** `pass-cli` is a trusted channel, but item titles and
+vault names inside a shared vault are authored by whoever can edit it. The index
+path therefore treats that metadata as untrusted input: title and vault-name
+length, vault count, item count, response size, and total indexing time are all
+bounded. `tests/budget-test.sh` enforces every one of those bounds against a
+hostile CLI, and CI fails the build if a bound is raised past a sane ceiling.
+When a limit is reached the panel says so; it never silently drops logins.
 
 ## How copying a secret actually works
 
