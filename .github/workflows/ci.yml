@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for command in bash cmp find grep jq node od sha256sum shellcheck timeout unshare; do
+          for command in bash cmp find grep head jq node od seq sha256sum shellcheck timeout unshare; do
             command -v "$command" >/dev/null || {
               printf 'Required runner tool is missing: %s\n' "$command" >&2
               exit 1
@@ -68,6 +68,39 @@ jobs:
         timeout-minutes: 2
         shell: bash
         run: sudo unshare --net -- tests/source-contract-test.sh
+
+      - name: Test resource budget offline
+        timeout-minutes: 6
+        shell: bash
+        run: sudo unshare --net -- tests/budget-test.sh
+
+      # Mutation check: a budget suite that has never failed proves nothing.
+      # The budgets are read from the helper so the behavioural assertions
+      # cannot drift, which means only a raised-past-ceiling mutation can prove
+      # the suite still bites.
+      - name: Seeded budget violation is rejected
+        timeout-minutes: 6
+        id: seeded_budget_violation
+        continue-on-error: true
+        shell: bash
+        run: |
+          sed -i 's/^readonly INDEX_MAX_ITEMS_TOTAL=.*/readonly INDEX_MAX_ITEMS_TOTAL=999999999/' \
+            omarchy-protonpass
+          sudo unshare --net -- tests/budget-test.sh
+
+      - name: Assert seeded budget violation failed
+        timeout-minutes: 2
+        if: always()
+        shell: bash
+        env:
+          SEEDED_OUTCOME: ${{ steps.seeded_budget_violation.outcome }}
+        run: |
+          git checkout -- omarchy-protonpass
+          if [[ $SEEDED_OUTCOME != failure ]]; then
+            printf 'Budget suite accepted the seeded violation\n' >&2
+            exit 1
+          fi
+          printf 'Budget suite rejected the seeded violation\n'
 
       # Mutation check: the security suite itself is part of the security
       # boundary. This step must fail after a secret-retaining QML property is
