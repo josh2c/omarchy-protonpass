@@ -34,6 +34,8 @@ assert_contains 'Quickshell.env("OMARCHY_PROTONPASS_HELPER")' \
   "the test helper override is missing"
 assert_contains 'Qt.resolvedUrl("omarchy-protonpass").toString().replace(/^file:\/\//, "")' \
   "the installed helper is not resolved relative to Service.qml"
+assert_panel_contains 'ipcTarget: "josh2c.protonpass"' \
+  "the panel is missing ipcTarget for external shell IPC and hotkeys"
 
 # --- Response trust boundary --------------------------------------------
 assert_contains 'schemaVersion !== 1' \
