@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly DOCTOR_TIMEOUT_SECONDS=5
-readonly INDEX_TIMEOUT_SECONDS=20
+readonly INDEX_TIMEOUT_SECONDS=90
 readonly COPY_TIMEOUT_SECONDS=15
 readonly CREATE_TIMEOUT_SECONDS=20
 readonly LOCK_TIMEOUT_SECONDS=15
@@ -11,6 +11,14 @@ readonly CLIP_HASH_BASENAME=omarchy-protonpass.clip
 readonly RECENTS_DIRNAME=omarchy-protonpass
 readonly RECENTS_BASENAME=recents.json
 readonly RECENTS_LIMIT=8
+# pass-cli has no local cache of its own: every item-list call is a live,
+# server-round-trip fetch, which is minutes-of-wall-clock territory for a
+# large vault (confirmed: process CPU time is a few seconds against 30-40s+
+# of real time -- almost all of it is network wait, not local work). Caching
+# the built index to disk means only a cold cache pays that cost; an explicit
+# user action (Refresh, Retry, or the refresh keybind) always bypasses it.
+readonly CACHE_BASENAME=index-cache.json
+readonly CACHE_TTL_SECONDS=3600
 # Titles and vault names come from whoever shared the vault and are otherwise
 # unbounded, so the index truncates them for display rather than rejecting the
 # item — one hostile entry must not hide the rest of a legitimate vault.
@@ -25,7 +33,7 @@ readonly INDEX_MAX_VAULTS=100
 readonly INDEX_MAX_ITEMS_PER_VAULT=5000
 readonly INDEX_MAX_ITEMS_TOTAL=10000
 readonly INDEX_MAX_RESPONSE_BYTES=10485760
-readonly INDEX_DEADLINE_SECONDS=60
+readonly INDEX_DEADLINE_SECONDS=90
 
 emit_doctor() {
   local state=$1 message=$2 pass_present=$3 version=$4 clipboard_present=$5
@@ -517,6 +525,73 @@ recents_path() {
   printf '%s/%s/%s' "$state_home" "$RECENTS_DIRNAME" "$RECENTS_BASENAME"
 }
 
+cache_path() {
+  local state_home=${XDG_STATE_HOME:-}
+  if [[ -z $state_home ]]; then
+    [[ -n ${HOME:-} ]] || return 1
+    state_home=$HOME/.local/state
+  fi
+  printf '%s/%s/%s' "$state_home" "$RECENTS_DIRNAME" "$CACHE_BASENAME"
+}
+
+# Emits nothing; sets CACHE_ITEMS/CACHE_WARNINGS/CACHE_VAULTS/CACHE_MESSAGE on
+# a hit. Takes the vault list from the just-completed live vault-list call
+# (see index_command): a cache whose vaults don't match it -- a different
+# --exclude-vaults setting, or a vault renamed/added/removed/shared since --
+# is a miss, not a match silently served against a changed vault set.
+read_index_cache() {
+  local current_vaults=$1
+  local path mtime now
+  path=$(cache_path) || return 1
+  [[ -f $path && ! -L $path ]] || return 1
+  mtime=$(stat -c %Y -- "$path" 2>/dev/null) || return 1
+  now=$(date +%s)
+  (( now - mtime <= CACHE_TTL_SECONDS )) || return 1
+  jq -e --argjson currentVaults "$current_vaults" '
+    type == "object" and
+    ((.vaults | sort_by(.shareId)) == ($currentVaults | sort_by(.shareId))) and
+    (.items | type) == "array" and (.warnings | type) == "array" and
+    (.message | type) == "string"
+  ' "$path" >/dev/null 2>&1 || return 1
+  CACHE_ITEMS=$(jq -c '.items' "$path") || return 1
+  CACHE_WARNINGS=$(jq -c '.warnings' "$path") || return 1
+  CACHE_VAULTS=$(jq -c '.vaults' "$path") || return 1
+  CACHE_MESSAGE=$(jq -r '.message' "$path") || return 1
+}
+
+write_index_cache() {
+  # items can be tens of thousands of bytes -- passed as --argjson it can
+  # exceed the OS argv limit ("Argument list too long"), same as the reason
+  # the index walk above accumulates items in a scratch file instead of a
+  # growing argument. Route it through --slurpfile (a filename, not content)
+  # instead.
+  local items=$1 warnings=$2 vaults=$3 message=$4
+  local path directory temporary items_tmp
+  path=$(cache_path) || return 1
+  directory=${path%/*}
+  [[ ! -L $directory ]] || return 1
+  umask 077
+  if [[ ! -d $directory ]]; then
+    mkdir -p -- "$directory" || return 1
+    chmod 700 "$directory" || return 1
+  fi
+  items_tmp=$(mktemp "$directory/.index-cache-items.json.XXXXXX") || return 1
+  printf '%s' "$items" >"$items_tmp" || { rm -f -- "$items_tmp"; return 1; }
+  temporary=$(mktemp "$directory/.index-cache.json.XXXXXX") || { rm -f -- "$items_tmp"; return 1; }
+  if ! jq -cn \
+       --slurpfile itemsFile "$items_tmp" \
+       --argjson warnings "$warnings" \
+       --argjson vaults "$vaults" --arg message "$message" \
+       '{items: $itemsFile[0], warnings: $warnings, vaults: $vaults, message: $message}' \
+       >"$temporary" ||
+     ! chmod 600 "$temporary" ||
+     ! mv -f -- "$temporary" "$path"; then
+    rm -f -- "$temporary" "$items_tmp"
+    return 1
+  fi
+  rm -f -- "$items_tmp"
+}
+
 load_recents_data() {
   local path loaded
   path=$(recents_path) || return 1
@@ -608,6 +683,7 @@ doctor_command() {
 
 parse_index_args() {
   local exclude_vaults="" seen_exclude=false
+  INDEX_FORCE_REFRESH=false
 
   while (( $# > 0 )); do
     case $1 in
@@ -616,6 +692,10 @@ parse_index_args() {
         exclude_vaults=$2
         seen_exclude=true
         shift 2
+        ;;
+      --force)
+        INDEX_FORCE_REFRESH=true
+        shift
         ;;
       *) return 2 ;;
     esac
@@ -783,6 +863,18 @@ index_command() {
   contract_vaults=$(jq -c --argjson limit "$INDEX_DISPLAY_TEXT_LIMIT" \
     '[.[] | {shareId: .share_id, name: (.name[0:$limit])}]' <<<"$vaults")
 
+  # The cache only ever replaces the item-list walk below, never the vault
+  # list call above: vault list is the live signal that pass-cli is actually
+  # authenticated right now (logged out, locked, revoked, offline all fail
+  # there), so a cached "ready" from an hour ago can never paper over a
+  # present-tense auth failure. It also means a renamed/added/removed vault
+  # -- a genuine change in what's out there -- naturally misses the cache
+  # without needing its own invalidation rule.
+  if [[ $INDEX_FORCE_REFRESH != true ]] && read_index_cache "$contract_vaults"; then
+    emit_index ready "$CACHE_MESSAGE" "$CACHE_ITEMS" "$CACHE_WARNINGS" "$CACHE_VAULTS"
+    return 0
+  fi
+
   if ! open_index_scratch; then
     emit_index error "Something went wrong talking to pass-cli" '[]' '[]' '[]'
     return 0
@@ -873,6 +965,10 @@ index_command() {
   : "$vaults_walked"
 
   if [[ $warnings == '[]' ]]; then
+    # Only a fully clean walk is cached -- a partial failure cached for
+    # CACHE_TTL_SECONDS would silently hide a vault for up to an hour after
+    # the next open, instead of retrying it.
+    write_index_cache "$items" "$warnings" "$contract_vaults" "Login items ready" || true
     emit_index ready "Login items ready" "$items" "$warnings" "$contract_vaults"
   else
     emit_index ready "Some vaults could not be loaded" "$items" "$warnings" "$contract_vaults"

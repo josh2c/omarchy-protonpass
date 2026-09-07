@@ -49,6 +49,11 @@ Item {
     property int _indexGeneration: 0
     property int _activeIndexGeneration: 0
     property bool _indexPending: false
+    property bool _indexPendingForce: false
+    // Fires once, the first time doctor ever confirms pass-cli is usable
+    // (normally right at shell startup), so the on-disk cache is warm before
+    // the user opens the panel for the first time this session.
+    property bool _startupPrefetchArmed: true
     property string _recentsOperation: ""
     property string _pendingRecentsOperation: ""
     property string _createInput: ""
@@ -370,16 +375,34 @@ Item {
         doctorProcess.running = true;
     }
 
-    function _launchIndex() {
-        if (!panelOpen || indexProcess.running)
+    function _launchIndex(force, ignorePanelGate) {
+        if ((!panelOpen && !ignorePanelGate) || indexProcess.running)
             return;
         _indexPending = false;
+        _indexPendingForce = false;
         _activeIndexGeneration = _indexGeneration;
-        indexProcess.command = [helperPath(), "index", "--exclude-vaults", String(setting("excludeVaults", ""))];
+        indexProcess.command = [helperPath(), "index", "--exclude-vaults", String(setting("excludeVaults", ""))]
+            .concat(force ? ["--force"] : []);
         indexProcess.running = true;
     }
 
-    function refresh() {
+    // Warms the on-disk index cache once pass-cli is confirmed usable,
+    // whether or not the panel is open yet. It never forces a live fetch --
+    // an already-warm cache from a previous session just gets confirmed
+    // near-instantly -- and a later panel open still revalidates normally
+    // through refresh().
+    function prefetch() {
+        if (state === "MISSING_DEPS" || indexProcess.running)
+            return;
+        _indexGeneration++;
+        _launchIndex(false, true);
+    }
+
+    // force skips the on-disk index cache (an hour-old page of results no
+    // automatic re-open should feel entitled to override): an explicit
+    // user action -- Refresh, Retry, the refresh keybind -- passes true, a
+    // plain panel (re)open leaves it default false and may hit the cache.
+    function refresh(force) {
         if (!panelOpen)
             return;
 
@@ -395,14 +418,15 @@ Item {
 
         if (indexProcess.running) {
             _indexPending = true;
+            _indexPendingForce = !!force;
             indexProcess.running = false;
             return;
         }
-        _launchIndex();
+        _launchIndex(!!force);
     }
 
     function retry() {
-        refresh();
+        refresh(true);
     }
 
     function recheck() {
@@ -639,6 +663,10 @@ Item {
             root._doctorReady = true;
             root.state = "INIT";
             root.message = response.message;
+            if (root._startupPrefetchArmed) {
+                root._startupPrefetchArmed = false;
+                Qt.callLater(root.prefetch);
+            }
             if (shouldIndex && root.panelOpen)
                 Qt.callLater(root.refresh);
         }
@@ -656,9 +684,10 @@ Item {
         onExited: function(exitCode) {
             var responseGeneration = root._activeIndexGeneration;
             var pending = root._indexPending;
+            var pendingForce = root._indexPendingForce;
             if (responseGeneration !== root._indexGeneration) {
                 if (pending && root.panelOpen)
-                    Qt.callLater(root._launchIndex);
+                    Qt.callLater(function() { root._launchIndex(pendingForce); });
                 return;
             }
 

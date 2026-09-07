@@ -65,7 +65,7 @@ run_index() {
   env -i PATH="$bin" HOME="$sandbox" \
     XDG_RUNTIME_DIR="$sandbox/run" XDG_STATE_HOME="$sandbox/state" \
     HOSTILE_CASE="$1" ${2:+HOSTILE_STALL="$2"} \
-    bash "$HELPER" index --exclude-vaults ""
+    bash "$HELPER" index --exclude-vaults "" --force
 }
 
 # --- 1. a vault flood is capped, and says so -------------------------------

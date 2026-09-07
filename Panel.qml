@@ -77,7 +77,7 @@ Panel {
   }
 
   function runHeaderAction(spec) {
-    if (spec.action === "refresh") { svc.refresh(); return }
+    if (spec.action === "refresh") { svc.refresh(true); return }
     if (spec.action === "lock") { svc.lock(); return }
     if (createFormOpen) {
       closeCreateForm()
@@ -276,7 +276,7 @@ Panel {
     case "copy-totp": root.copySelected("totp"); break
     case "cursor-down": root.moveCursor(1); break
     case "cursor-up": root.moveCursor(-1); break
-    case "refresh": svc.refresh(); break
+    case "refresh": svc.refresh(true); break
     case "lock": svc.lock(); break
     case "clear-clipboard":
       if (typeof svc.clearClipboard === "function") svc.clearClipboard()
@@ -597,6 +597,8 @@ Panel {
         meta: svc.state === "READY"
           ? root.headerStatusText()
             + (svc.staleWarning ? " · cached — refresh failed" : (svc.refreshing ? " · refreshing" : ""))
+          : svc.state === "LOADING"
+          ? "Loading Proton Pass logins…"
           : (svc.message !== "" ? svc.message : "Checking pass-cli…")
         detail: svc.state === "READY" && search.text !== ""
           ? svc.filteredItems.length + (svc.filteredItems.length === 1 ? " match" : " matches")

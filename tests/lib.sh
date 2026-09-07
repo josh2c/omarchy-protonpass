@@ -43,7 +43,7 @@ make_test_sandbox() {
   ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
 
   local utility utility_path
-  for utility in bash cat chmod cmp cut date dirname find grep head jq ln mkdir mktemp mv od readlink rm sha256sum sleep stat tail timeout; do
+  for utility in bash cat chmod cmp cut date dirname find grep head jq ln mkdir mktemp mv od readlink rm sha256sum sleep stat tail timeout touch; do
     utility_path=$(command -v "$utility") || fail "required test utility is missing: $utility"
     ln -s "$utility_path" "$TEST_BIN/$utility"
   done
