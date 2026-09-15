@@ -82,6 +82,16 @@ emit_unicode_items() {
 JSON
 }
 
+emit_control_character_items() {
+  cat <<'JSON'
+{"items":[
+  {"id":"item_escape","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:47:00","modify_time":"2026-08-20T22:47:00","title":"Pay\u001b]8;;http://evil.test\u0007Pal","item_type":"login"},
+  {"id":"item_bidi","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:47:01","modify_time":"2026-08-20T22:47:01","title":"invoice\u202egnp.exe","item_type":"login"},
+  {"id":"item_controls","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:47:02","modify_time":"2026-08-20T22:47:02","title":"\u0001\u0002\u001b\u200b\u2066","item_type":"login"}
+]}
+JSON
+}
+
 record_call "$@"
 
 if [[ ${MOCK_ASSERT_SAFE_ENV:-0} == 1 ]]; then
@@ -119,6 +129,8 @@ if [[ ${1:-} == vault && ${2:-} == list ]]; then
     ready-multivault|empty-vault|zero-logins) emit_multivault_vaults ;;
     zero-vaults) jq -cn '{vaults:[]}' ;;
     malformed-vault-entry) jq -cn '{vaults:[{name:"",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
+    control-vault-name) jq -cn '{vaults:[{name:"\u202ePersonal\u001b",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
+    control-only-vault-name) jq -cn '{vaults:[{name:"\u001b\u200b\u2066\uFEFF",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
     oversized-title)
       jq -cn '{vaults:[{name:("V" * 700),vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}'
       ;;
@@ -148,6 +160,7 @@ if [[ ${1:-} == item && ${2:-} == list ]]; then
     zero-vaults) emit_empty_items ;;
     oversized-title) emit_oversized_items ;;
     unicode-titles) emit_unicode_items ;;
+    control-characters) emit_control_character_items ;;
     *) emit_ready_items ;;
   esac
   exit 0
