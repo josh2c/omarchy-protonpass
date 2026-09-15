@@ -6,6 +6,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 trap cleanup_test_sandbox EXIT
 make_test_sandbox
 
+# Captured before any in-process helper call. The function tests below run the
+# helper's capture logic in this shell, so a umask set process-wide inside it
+# would show up here for the rest of the run.
+CALLER_UMASK=$(umask)
+
 PASS_CLI="$TEST_BIN/pass-cli"
 FIXTURES="$TEST_ROOT/tests/fixtures"
 
@@ -270,6 +275,11 @@ done
 assert_eq "600" "$(stat -c '%a' "$STDERR_CAPTURE_FILE")" "captured stderr scratch file mode"
 [[ ! -s $STDERR_CAPTURE_FILE ]] || fail "captured stderr scratch file retained content"
 
+# The 0600 mode above comes from the create, not from a process-wide umask: a
+# bare `umask 077` was still in force here, quietly changing the mask for every
+# file this process — or anything it shells out to — created afterwards.
+assert_eq "$CALLER_UMASK" "$(umask)" "helper leaves the caller's umask alone"
+
 set +e
 MOCK_SCENARIO=timeout-sleeps MOCK_SLEEP_SECONDS=1 run_pass_cli 0.02 vault list --output json >/dev/null 2>&1
 runner_timeout_status=$?
@@ -417,6 +427,14 @@ assert_jq '.recents == [{shareId:"share_fixture_1",itemId:"item_fixture_1",ts:.r
   (.recents[0].ts|type) == "number"' "$(<"$RECENTS_FILE")" "copy records recent ids only"
 password_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
 assert_jq '. == [["item","view","--share-id","share_fixture_1","--item-id","item_fixture_1","--field","password"]]' "$password_calls" "password pass-cli argv"
+
+# Every file the helper writes takes its mode from mktemp (0600 by construction)
+# or an explicit chmod, so setting a umask process-wide buys nothing and leaks
+# into everything created later in the same process, including files the CLI it
+# shells out to writes. The mock records the umask it inherited.
+expected_umask=$(umask)
+assert_eq "$expected_umask" "$(tail -n1 "$MOCK_UMASK_LOG")" \
+  "helper leaves the process umask unchanged"
 
 clear_now_match=$(MOCK_WL_PASTE_VALUE=synthetic-value "$HELPER" clear-now)
 assert_jq '.schemaVersion == 1 and .command == "clear-now" and .state == "cleared"' \
