@@ -5,9 +5,9 @@ future change can be diffed against something instead of asserted about.
 
 | File | Produced by | What it pins |
 |---|---|---|
-| `panel-snapshot.txt` | `tests/qml-panel-snapshot.sh` | Every visible item in sixteen panel states: absolute position, size, text, glyph, colour, font, alignment, wrap, accessible name |
+| `panel-snapshot.txt` | `tests/qml-panel-snapshot.sh` | Every visible item in seventeen panel states: absolute position, size, text, glyph, colour, font, alignment, wrap, accessible name |
 | `key-matrix.txt` | `tests/qml-key-matrix.sh` | Every keyboard binding in both focus contexts, and what the panel did |
-| `service-scenarios.txt` | `tests/qml-service-scenarios.sh` | The state the Service settles in for each mock scenario, plus the auth-during-refresh invariant |
+| `service-scenarios.txt` | `tests/qml-service-scenarios.sh` | The state the Service settles in for each mock scenario, the auth-during-refresh invariant, and the three index lifecycle cases |
 
 `tests/qml-panel-pixel-check.sh` produces no baseline. It screenshots one state
 next to its dump, and exists for when a dump and your expectation disagree: it
@@ -20,7 +20,12 @@ tests/qml-panel-snapshot.sh /tmp/after.txt
 diff tests/baselines/panel-snapshot.txt /tmp/after.txt
 ```
 
-These are **not** pass/fail tests and are deliberately not wired into CI.
+These are **not** pass/fail tests and are deliberately not wired into CI --
+except that `tests/qml-service-scenarios.sh` and `tests/qml-row-perf.sh` now
+also assert: the scenario run fails if an index lifecycle case does not hold,
+and the row perf run fails if the list builds more than two hundred row
+delegates at five thousand items or rebuilds them on a clock tick. The dumps
+they print are still comparison material.
 
 - `panel-snapshot.txt` records this machine's font metrics. Geometry will differ
   on a host with different fonts, so compare runs from one machine.
