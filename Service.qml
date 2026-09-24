@@ -32,6 +32,14 @@ Item {
     readonly property var recentItems: joinRecents(items, recents)
     readonly property int maxIndexItems: 10000
     readonly property int maxIndexVaults: 100
+    // How long an in-memory index may be reused on a panel open before the
+    // open pays for a fetch of its own. A vault changes when the user edits it
+    // somewhere else, which is rare and never urgent; a fetch on a large vault
+    // costs tens of seconds, which is neither. Five minutes is short enough
+    // that an item added in another window shows up in the same sitting, and
+    // long enough that opening the panel repeatedly costs nothing. Explicit
+    // refresh, a successful create, and every auth transition bypass it.
+    readonly property int indexFreshnessMs: 300000
     readonly property bool displayingRecents: showRecents && query === "" && recentItems.length > 0
     // Rows are the item objects themselves. Nothing is precomputed into them:
     // the subtitle and the cursor index are derived in the delegate, so typing
@@ -371,7 +379,7 @@ Item {
     }
 
     function _launchIndex() {
-        if (!panelOpen || indexProcess.running)
+        if (indexProcess.running)
             return;
         _indexPending = false;
         _activeIndexGeneration = _indexGeneration;
@@ -379,6 +387,10 @@ Item {
         indexProcess.running = true;
     }
 
+    // An explicit refresh -- the button, the keybind, a retry, a successful
+    // create, or a doctor check that recovered the dependency. It always
+    // fetches: the freshness window below is for opens the user did not ask a
+    // fetch for, never for a request the user made.
     function refresh() {
         if (!panelOpen)
             return;
@@ -401,6 +413,21 @@ Item {
         _launchIndex();
     }
 
+    // The panel-open path. It fetches only when there is nothing in memory or
+    // what is in memory has aged out, and it never starts a second fetch on
+    // top of one that is already coming -- including one still running from
+    // before the panel was closed.
+    function refreshIfStale() {
+        if (!panelOpen)
+            return;
+        if (_indexPending)
+            return;
+        if (indexProcess.running && _activeIndexGeneration === _indexGeneration)
+            return;
+        if (!_hasIndex || Date.now() - lastSuccessfulIndexAt >= indexFreshnessMs)
+            refresh();
+    }
+
     function retry() {
         refresh();
     }
@@ -421,26 +448,20 @@ Item {
             runDoctor(true);
         } else if (!_doctorReady) {
             runDoctor(true);
-        } else if (state === "LOADING" && indexProcess.running
-                && _activeIndexGeneration !== _indexGeneration) {
-            // The panel reopened while a close-triggered SIGTERM was still in
-            // flight. Start the current generation as soon as it exits.
-            _indexPending = true;
-        } else if (state !== "LOADING" || !indexProcess.running) {
-            refresh();
+        } else {
+            refreshIfStale();
         }
     }
 
     function onPanelClosed() {
         panelOpen = false;
         _doctorContinueIndex = false;
-        _indexPending = false;
-        if (indexProcess.running) {
-            // Invalidate before SIGTERM so onExited cannot publish stale data.
-            _indexGeneration++;
-            indexProcess.running = false;
-        }
-        refreshing = false;
+        // An index request in flight is deliberately left to finish. On a large
+        // vault the fetch costs tens of seconds, and killing it on every close
+        // meant a user who looked away never got an index at all: the next open
+        // started the same walk from zero. The response is still fenced by its
+        // generation, so a refresh requested later supersedes it and an auth
+        // transition still clears the model out from under it.
         // Copy, create, clear-now, lock, recents, and logout processes intentionally continue to completion.
     }
 
@@ -640,7 +661,7 @@ Item {
             root.state = "INIT";
             root.message = response.message;
             if (shouldIndex && root.panelOpen)
-                Qt.callLater(root.refresh);
+                Qt.callLater(root.refreshIfStale);
         }
         stdout: StdioCollector {
             id: doctorOutput
@@ -657,7 +678,7 @@ Item {
             var responseGeneration = root._activeIndexGeneration;
             var pending = root._indexPending;
             if (responseGeneration !== root._indexGeneration) {
-                if (pending && root.panelOpen)
+                if (pending)
                     Qt.callLater(root._launchIndex);
                 return;
             }

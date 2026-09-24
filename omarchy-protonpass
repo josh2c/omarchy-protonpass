@@ -2,7 +2,6 @@
 set -euo pipefail
 
 readonly DOCTOR_TIMEOUT_SECONDS=5
-readonly INDEX_TIMEOUT_SECONDS=20
 readonly COPY_TIMEOUT_SECONDS=15
 readonly CREATE_TIMEOUT_SECONDS=20
 readonly LOCK_TIMEOUT_SECONDS=15
@@ -25,7 +24,13 @@ readonly INDEX_MAX_VAULTS=100
 readonly INDEX_MAX_ITEMS_PER_VAULT=5000
 readonly INDEX_MAX_ITEMS_TOTAL=10000
 readonly INDEX_MAX_RESPONSE_BYTES=10485760
-readonly INDEX_DEADLINE_SECONDS=60
+# The one ceiling on the index walk. It was two constants: a per-vault
+# INDEX_TIMEOUT_SECONDS and this aggregate deadline. They were never two
+# bounds -- the deadline clamps every per-vault timeout to whatever is left
+# under it, so the smaller number only ever looked like the knob to raise.
+# One constant now sets both the vault-list call and each per-vault call, and
+# it is the only wall-clock bound the walk has.
+readonly INDEX_DEADLINE_SECONDS=90
 
 emit_doctor() {
   local state=$1 message=$2 pass_present=$3 version=$4 clipboard_present=$5
@@ -749,7 +754,7 @@ index_command() {
   deadline_epoch=$(( $(date +%s) + INDEX_DEADLINE_SECONDS ))
   CAPTURE_MAX_BYTES=$INDEX_MAX_RESPONSE_BYTES
   run_pass_cli_captured false vault_stdout vault_stderr vault_status \
-    "$INDEX_TIMEOUT_SECONDS" vault list --output json
+    "$INDEX_DEADLINE_SECONDS" vault list --output json
   if (( vault_status != 0 )); then
     fail_classified index "$vault_status" "$vault_stderr"
     return 0
@@ -790,8 +795,9 @@ index_command() {
 
   while IFS= read -r vault_json; do
     # One deadline governs the whole walk. Per-request timeouts do not compose:
-    # N vaults at INDEX_TIMEOUT_SECONDS each is N times the bound, which is no
-    # bound at all when N is attacker-chosen.
+    # N vaults at a per-vault timeout each is N times the bound, which is no
+    # bound at all when N is attacker-chosen. So each vault gets whatever is
+    # left of the deadline and nothing else decides it.
     remaining=$(( deadline_epoch - $(date +%s) ))
     if (( remaining <= 0 )); then
       warnings=$(jq -cn --argjson warnings "$warnings" \
@@ -803,10 +809,7 @@ index_command() {
         '$warnings + ["Some items were not indexed (limit \($limit) reached)"]')
       break
     fi
-    vault_timeout=$INDEX_TIMEOUT_SECONDS
-    if (( remaining < vault_timeout )); then
-      vault_timeout=$remaining
-    fi
+    vault_timeout=$remaining
     vaults_walked=$(( vaults_walked + 1 ))
 
     share_id=$(jq -r '.share_id' <<<"$vault_json")

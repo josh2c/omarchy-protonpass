@@ -135,9 +135,191 @@ ShellRoot {
     repeat: false
     onTriggered: {
       console.log("SCENARIO auth-during-refresh " + harness.observe())
-      console.log("HARNESS-DONE")
-      Qt.quit()
+      harness.startLifecycle()
     }
+  }
+
+  // ---- index lifecycle cases ----------------------------------------------
+  // These are pass/fail, not observations. They cover what the large-vault fix
+  // promises: a fetch survives the panel closing, a reopen inside the freshness
+  // window does not start a second one, and an explicit refresh -- here the one
+  // a successful create issues -- fetches anyway.
+  property string stage: ""
+  property int stageTicks: 0
+  property int indexCalls: 0
+  property var afterCount: null
+
+  function countIndexCalls(next) {
+    afterCount = next
+    logReader.command = ["sh", "-c", "grep -c '^index' \"$HELPER_LOG\" || true"]
+    logReader.running = true
+  }
+
+  function lifecycleFail(label, detail) {
+    console.log("LIFECYCLE-FAIL " + label + " " + detail + " " + observe())
+    console.log("HARNESS-DONE")
+    Qt.quit()
+  }
+
+  function startLifecycle() {
+    stage = "loading-open"
+    lifecycleWriter.command = ["sh", "-c",
+      "printf '%s' \"$1\" > \"$SCENARIO_FILE\"; : > \"$HELPER_LOG\"", "sh", "slow-items"]
+    lifecycleWriter.running = true
+  }
+
+  Process {
+    id: logReader
+    running: false
+    command: []
+    onExited: {
+      harness.indexCalls = parseInt(String(logOutput.text).trim(), 10) || 0
+      var next = harness.afterCount
+      harness.afterCount = null
+      if (next) next()
+    }
+    stdout: StdioCollector { id: logOutput; waitForEnd: true }
+    stderr: StdioCollector { waitForEnd: true }
+  }
+
+  Process {
+    id: lifecycleWriter
+    running: false
+    command: []
+    onExited: {
+      svcLoader.active = false
+      svcLoader.active = true
+      harness.stageTicks = 0
+      lifecycleStart.restart()
+    }
+  }
+
+  Timer {
+    id: lifecycleStart
+    interval: 200
+    repeat: false
+    onTriggered: {
+      harness.svc().onPanelOpened()
+      harness.stageTicks = 0
+      lifecycleTimer.restart()
+    }
+  }
+
+  Timer {
+    id: lifecycleTimer
+    interval: 200
+    repeat: true
+    running: false
+    onTriggered: harness.lifecycleTick()
+  }
+
+  function lifecycleTick() {
+    var s = svc()
+    stageTicks++
+    if (stageTicks > 150) {
+      lifecycleTimer.running = false
+      lifecycleFail(stage, "timed-out")
+      return
+    }
+
+    if (stage === "loading-open") {
+      // Wait for the fetch to actually be in flight before closing on it.
+      if (s.state !== "LOADING") return
+      s.onPanelClosed()
+      stage = "closed-during-loading"
+      stageTicks = 0
+      return
+    }
+
+    if (stage === "closed-during-loading") {
+      if (stageTicks < 3) return
+      // Reopening must find the same fetch still running, not start another.
+      s.onPanelOpened()
+      stage = "reopened-during-loading"
+      stageTicks = 0
+      return
+    }
+
+    if (stage === "reopened-during-loading") {
+      if (s.state !== "READY") return
+      lifecycleTimer.running = false
+      countIndexCalls(function() {
+        if (harness.indexCalls !== 1 || !harness.svc().hasIndex) {
+          harness.lifecycleFail("close-during-loading",
+            "indexCalls=" + harness.indexCalls)
+          return
+        }
+        console.log("SCENARIO close-during-loading indexCalls="
+          + harness.indexCalls + " " + harness.observe())
+        harness.stage = "fresh-close"
+        harness.stageTicks = 0
+        lifecycleTimer.running = true
+      })
+      return
+    }
+
+    if (stage === "fresh-close") {
+      // A close and reopen with a fresh index in memory must not fetch again.
+      s.onPanelClosed()
+      s.onPanelOpened()
+      stage = "fresh-reopened"
+      stageTicks = 0
+      return
+    }
+
+    if (stage === "fresh-reopened") {
+      if (stageTicks < 6) return
+      lifecycleTimer.running = false
+      countIndexCalls(function() {
+        if (harness.indexCalls !== 1) {
+          harness.lifecycleFail("reopen-within-freshness-window",
+            "indexCalls=" + harness.indexCalls)
+          return
+        }
+        console.log("SCENARIO reopen-within-freshness-window indexCalls="
+          + harness.indexCalls + " " + harness.observe())
+        harness.startCreateCase()
+      })
+      return
+    }
+
+    if (stage === "create-ready") {
+      if (s.state !== "READY" || !s.hasIndex) return
+      if (!s.create("share_fixture_1", "Lifecycle Login", "username", "user@example.com")) {
+        lifecycleTimer.running = false
+        lifecycleFail("create-refetches", "create-refused")
+        return
+      }
+      stage = "create-running"
+      stageTicks = 0
+      return
+    }
+
+    if (stage === "create-running") {
+      if (s.createBusy) return
+      if (stageTicks < 6) return
+      lifecycleTimer.running = false
+      countIndexCalls(function() {
+        // The index was fresh, so only an explicit refresh can have fetched.
+        if (harness.indexCalls !== 2) {
+          harness.lifecycleFail("create-refetches",
+            "indexCalls=" + harness.indexCalls)
+          return
+        }
+        console.log("SCENARIO create-refetches indexCalls="
+          + harness.indexCalls + " " + harness.observe())
+        console.log("HARNESS-DONE")
+        Qt.quit()
+      })
+      return
+    }
+  }
+
+  function startCreateCase() {
+    stage = "create-ready"
+    lifecycleWriter.command = ["sh", "-c",
+      "printf '%s' \"$1\" > \"$SCENARIO_FILE\"; : > \"$HELPER_LOG\"", "sh", "ready"]
+    lifecycleWriter.running = true
   }
 
   Component.onCompleted: harness.next()

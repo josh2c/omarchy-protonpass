@@ -597,7 +597,14 @@ Panel {
         meta: svc.state === "READY"
           ? root.headerStatusText()
             + (svc.staleWarning ? " · cached — refresh failed" : (svc.refreshing ? " · refreshing" : ""))
-          : (svc.message !== "" ? svc.message : "Checking pass-cli…")
+          : (svc.state === "LOADING"
+            // While a fetch is in flight, say so. svc.message only changes when
+            // a doctor check or an index fetch finishes, so binding it here left
+            // the startup doctor's text ("Dependencies are available") sitting
+            // over a fetch that can run for tens of seconds on a large vault,
+            // which reads exactly like the panel has hung.
+            ? "Loading Proton Pass logins…"
+            : (svc.message !== "" ? svc.message : "Checking pass-cli…"))
         detail: svc.state === "READY" && search.text !== ""
           ? svc.filteredItems.length + (svc.filteredItems.length === 1 ? " match" : " matches")
           : ""
