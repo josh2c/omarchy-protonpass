@@ -28,6 +28,15 @@ ShellRoot {
      title: "Gamma Login", createTime: "2026-03-19T10:00:00"}
   ]
 
+  function largeVault() {
+    var out = []
+    for (var i = 0; i < 5000; i++)
+      out.push({itemId: "item_" + i, shareId: "share_a",
+                vaultName: i % 3 === 0 ? "Work" : "Personal",
+                title: "Login " + i, createTime: "2026-01-05T10:00:00"})
+    return out
+  }
+
   function sampleRecents() {
     return [{shareId: "share_b", itemId: "item_c",
              ts: Math.floor(Date.now() / 1000) - 7200}]
@@ -98,6 +107,12 @@ ShellRoot {
       svc.state = "READY"; svc.items = harness.sampleItems
       harness.panelRoot.showCreatedToast("share_a", "item_a") },
      sustain: function() { harness.panelRoot.showCreatedToast("share_a", "item_a") }},
+    // A vault the size of the one in the large-vault report. The list is
+    // virtualised, so what this state pins is that a five-thousand-item vault
+    // renders a viewport of rows and its cache -- not five thousand rows.
+    {label: "READY_LARGE_VAULT", setup: function(svc) {
+      svc.state = "READY"; svc.items = harness.largeVault() },
+     ready: function(svc) { return svc.allRows.length === 5000 }},
     {label: "READY_WARNING", setup: function(svc) {
       svc.state = "READY"; svc.items = harness.sampleItems
       svc.warnings = ["one vault failed"]; svc.message = "Some vaults could not be read" }}

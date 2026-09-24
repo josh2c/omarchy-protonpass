@@ -1,14 +1,22 @@
-// Row-model cost harness: fills the panel with a synthetic 500-item vault and
-// measures what typing actually costs, and whether the clock tick throws the
-// list away.
+// Row-list cost harness, as a pass/fail gate.
 //
-// Two numbers matter:
-//   type   -- wall time to apply a query and re-lay out the list.
-//   churn  -- whether the delegate objects survive a subtitle clock tick. If
-//             the rows carry a precomputed subtitle, ticking the clock builds a
-//             new array and every delegate in the list is destroyed and rebuilt;
-//             if the subtitle is a delegate binding, the same objects stay put
-//             and only the text re-evaluates.
+// It fills the real panel with a synthetic 5,000-item vault -- the size the
+// large-vault report is about -- types a query into it a character at a time,
+// and asks two questions with fixed answers:
+//
+//   live delegates -- how many row objects the list has instantiated once it
+//     has settled. A list that builds one object per item builds 5,000 of them
+//     inside the shell process every other widget shares, to fill a viewport
+//     300 px tall. A virtualised list builds the viewport plus its cache and
+//     nothing else, so this number is bounded by the panel's own height and
+//     does not move when the vault grows.
+//   delegateSurvived -- whether the row objects outlive a subtitle clock tick.
+//     If a row carried a precomputed subtitle, ticking the clock would build a
+//     new array and destroy every row in the list; a delegate-side binding
+//     leaves the same objects in place and only re-evaluates their text.
+//
+// Typing time is printed too, but it is a measurement, not the gate: wall clock
+// inside a nested compositor wobbles, and a count does not.
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
@@ -19,17 +27,20 @@ import "plugin" as Plugin
 ShellRoot {
   id: harness
 
-  readonly property int itemCount: 500
+  readonly property int itemCount: 5000
+  // A viewport of rows plus a screen of cache either side is on the order of
+  // twenty. Two hundred is well clear of that and nowhere near per-item.
+  readonly property int maxLiveDelegates: 200
   readonly property var queries: ["", "l", "lo", "log", "logi", "login", "login 4", "login 42", ""]
 
   property var panelRoot: null
-  property var keyboardPanel: null
   property var service: null
   property var content: null
-  property var listColumn: null
   property int step: -1
   property var lastFirstRow: null
   property int rebuilds: 0
+  property int worstDelegates: 0
+  property bool failed: false
 
   function findChild(obj, probe) {
     var kids = obj.data
@@ -65,29 +76,30 @@ ShellRoot {
     return out
   }
 
-  // The deepest Column holding the rows, found by shape so the harness does not
-  // depend on internal ids.
-  function findListColumn() {
-    var best = null
-    function walk(item, depth) {
-      if (!item) return
-      if (String(item).indexOf("QQuickColumn") === 0 && item.children.length > 20)
-        best = item
-      var kids = item.children
-      for (var i = 0; i < kids.length; i++) walk(kids[i], depth + 1)
-    }
-    walk(content, 0)
-    return best
+  // A row is any live object carrying both the item it renders and the cursor
+  // index it answers to. That shape is what the panel promises the keyboard,
+  // and it is the same whether the rows come from a Repeater or a ListView --
+  // so this counts the same thing before and after the change.
+  function collectRows(item, found) {
+    if (!item) return found
+    if (item.modelData !== undefined && item.cursorIndex !== undefined)
+      found.push(item)
+    var kids = item.children
+    if (kids)
+      for (var i = 0; i < kids.length; i++) collectRows(kids[i], found)
+    return found
+  }
+
+  function liveRows() {
+    return collectRows(content, [])
   }
 
   function firstRow() {
-    var column = findListColumn()
-    if (!column) return null
-    for (var i = 0; i < column.children.length; i++) {
-      var child = column.children[i]
-      if (child && child.modelData !== undefined) return child
-    }
-    return null
+    var rows = liveRows()
+    var best = null
+    for (var i = 0; i < rows.length; i++)
+      if (best === null || rows[i].cursorIndex < best.cursorIndex) best = rows[i]
+    return best
   }
 
   function measure() {
@@ -99,54 +111,52 @@ ShellRoot {
     var svc = service
     var started = Date.now()
     svc.query = queries[step]
-    // Force the whole chain to settle before reading the clock: the row count
-    // makes the filter run, and the delegate count makes the Repeater actually
-    // build them. content.implicitHeight is useless here -- the key catcher
-    // fills its parent and never reports a content-driven height.
+    // Force the filter to run before the clock is read; the list builds what it
+    // needs on its own schedule, which is exactly what is being measured.
     var visible = svc.allRows.length
-    var column = findListColumn()
-    var delegates = column ? column.children.length : -1
-    var height = column ? column.implicitHeight : 0
     var elapsed = Date.now() - started
-    // Identity, not count: a rebuilt list has the same number of delegates as
-    // a reused one. Only the object tells you which happened.
+    var rows = liveRows()
+    if (rows.length > harness.worstDelegates) harness.worstDelegates = rows.length
+    // Identity, not count: a rebuilt list has the same number of rows as a
+    // reused one. Only the object tells you which happened.
     var current = firstRow()
     var reused = harness.lastFirstRow !== null && current === harness.lastFirstRow
     if (!reused) harness.rebuilds++
     harness.lastFirstRow = current
     console.log("PERF type query=" + JSON.stringify(queries[step])
       + " visible=" + visible
-      + " delegates=" + delegates
+      + " liveDelegates=" + rows.length
       + " ms=" + elapsed
-      + " rowReused=" + reused
-      + " height=" + Math.round(height))
+      + " rowReused=" + reused)
     stepTimer.restart()
   }
 
   function churn() {
     service.query = ""
-    var before = firstRow()
-    var beforeCount = service.allRows.length
-    var column = findListColumn()
-    var started = Date.now()
-    service.refreshSubtitleNow()
-    var delegates = column ? column.children.length : -1
-    var height = column ? column.implicitHeight : 0
-    var elapsed = Date.now() - started
-    // A Repeater rebuild triggered by a model change lands on a later event
-    // loop turn, so reading the delegate back synchronously would report a
-    // survivor either way. Look again once the frame has gone through.
-    harness.tickBefore = before
-    harness.tickRows = beforeCount
-    harness.tickDelegates = delegates
-    harness.tickMs = elapsed
-    tickCheckTimer.restart()
+    churnSettleTimer.restart()
   }
 
   property var tickBefore: null
-  property int tickRows: 0
   property int tickDelegates: 0
   property int tickMs: 0
+
+  Timer {
+    id: churnSettleTimer
+    interval: 400
+    repeat: false
+    onTriggered: {
+      var rows = harness.liveRows()
+      if (rows.length > harness.worstDelegates) harness.worstDelegates = rows.length
+      harness.tickBefore = harness.firstRow()
+      harness.tickDelegates = rows.length
+      var started = Date.now()
+      harness.service.refreshSubtitleNow()
+      harness.tickMs = Date.now() - started
+      // A model-driven rebuild lands on a later event loop turn, so reading the
+      // row back synchronously would report a survivor either way.
+      tickCheckTimer.restart()
+    }
+  }
 
   Timer {
     id: tickCheckTimer
@@ -154,12 +164,26 @@ ShellRoot {
     repeat: false
     onTriggered: {
       var after = harness.firstRow()
-      console.log("PERF tick rows=" + harness.tickRows
-        + " delegates=" + harness.tickDelegates
+      var survived = harness.tickBefore !== null && harness.tickBefore === after
+      console.log("PERF tick items=" + harness.itemCount
+        + " liveDelegates=" + harness.tickDelegates
         + " ms=" + harness.tickMs
-        + " delegateSurvived=" + (harness.tickBefore !== null && harness.tickBefore === after))
-      console.log("PERF summary listRebuilds=" + harness.rebuilds
+        + " delegateSurvived=" + survived)
+      console.log("PERF summary items=" + harness.itemCount
+        + " worstLiveDelegates=" + harness.worstDelegates
+        + " limit=" + harness.maxLiveDelegates
+        + " listRebuilds=" + harness.rebuilds
         + " ofSteps=" + harness.queries.length)
+      if (harness.worstDelegates <= 0)
+        console.log("PERF-FAIL no rows were found -- the list never rendered")
+      else if (harness.worstDelegates > harness.maxLiveDelegates)
+        console.log("PERF-FAIL " + harness.worstDelegates + " live row delegates at "
+          + harness.itemCount + " items exceeds the limit of " + harness.maxLiveDelegates)
+      else if (!survived)
+        console.log("PERF-FAIL a subtitle clock tick destroyed and rebuilt the rows")
+      else
+        console.log("PERF-PASS " + harness.worstDelegates + " live row delegates at "
+          + harness.itemCount + " items, rows survive a clock tick")
       console.log("HARNESS-DONE")
       Qt.quit()
     }
@@ -167,7 +191,7 @@ ShellRoot {
 
   Timer {
     id: stepTimer
-    interval: 90
+    interval: 250
     repeat: false
     onTriggered: harness.measure()
   }
@@ -218,31 +242,33 @@ ShellRoot {
   }
 
   Timer {
-    id: openTimer
-    interval: 1400
+    id: startTimer
+    interval: 1500
     repeat: false
     onTriggered: {
-      plugin.open()
-      startTimer.start()
+      harness.panelRoot.open()
+      fillTimer.restart()
     }
   }
 
   Timer {
-    id: startTimer
-    interval: 900
+    id: fillTimer
+    interval: 800
     repeat: false
     onTriggered: {
-      harness.panelRoot = plugin
-      harness.keyboardPanel = harness.findChild(plugin, function(c) {
+      var keyboardPanel = harness.findChild(plugin, function(c) {
         return c.focusTarget !== undefined && c.contentItem !== undefined
       })
       harness.service = harness.findChild(plugin, function(c) {
         return c.displayItems !== undefined && c.state !== undefined
       })
-      harness.content = harness.keyboardPanel && harness.keyboardPanel.contentItem.length > 0
-        ? harness.keyboardPanel.contentItem[0] : null
+      harness.content = keyboardPanel && keyboardPanel.contentItem.length > 0
+        ? keyboardPanel.contentItem[0] : null
       if (!harness.content || !harness.service || !plugin.opened) {
-        console.log("PERF-SETUP-FAILED")
+        console.log("PERF-SETUP-FAILED panel=" + (harness.content !== null)
+          + " service=" + (harness.service !== null)
+          + " opened=" + plugin.opened)
+        console.log("HARNESS-DONE")
         Qt.quit()
         return
       }
@@ -257,15 +283,18 @@ ShellRoot {
     }
   }
 
+  // The list needs a few frames to build whatever it is going to build; giving
+  // an eager list less time than it needs would flatter it.
   Timer {
     id: settleTimer
-    interval: 700
+    interval: 3000
     repeat: false
     onTriggered: harness.measure()
   }
 
   Component.onCompleted: {
+    panelRoot = plugin
     plugin.open()
-    openTimer.start()
+    startTimer.start()
   }
 }

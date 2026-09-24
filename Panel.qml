@@ -211,20 +211,13 @@ Panel {
 
   function scrollCursorIntoView() {
     Qt.callLater(function() {
-      var recentCount = svc.recentRows.length
-      var row = root.cursorIndex < recentCount
-        ? recentRepeater.itemAt(root.cursorIndex)
-        : itemRepeater.itemAt(root.cursorIndex - recentCount)
-      if (!row || !itemListFlick) return
-      var point = row.mapToItem(itemListFlick.contentItem, 0, 0)
-      var margin = Style.space(8)
-      var top = point.y
-      var bottom = top + row.height
-      var maxY = Math.max(0, itemListFlick.contentHeight - itemListFlick.height)
-      if (top < itemListFlick.contentY + margin)
-        itemListFlick.contentY = Math.max(0, top - margin)
-      else if (bottom > itemListFlick.contentY + itemListFlick.height - margin)
-        itemListFlick.contentY = Math.min(maxY, bottom + margin - itemListFlick.height)
+      // The cursor index is the model index, and the row for it may not be
+      // built yet, so ask the list to bring that index into view rather than
+      // measuring a delegate that virtualisation is allowed not to have.
+      if (!itemList || svc.displayItems.length === 0) return
+      itemList.positionViewAtIndex(
+        Math.max(0, Math.min(root.cursorIndex, svc.displayItems.length - 1)),
+        ListView.Contain)
     })
   }
 
@@ -479,7 +472,7 @@ Panel {
       cursorIndex = 0
       search.clear()
       panelFlick.contentY = 0
-      itemListFlick.contentY = 0
+      itemList.positionViewAtBeginning()
       svc.onPanelOpened()
       Qt.callLater(function() { search.forceActiveFocus() })
     } else {
@@ -709,7 +702,7 @@ Panel {
               svc.query = text
               root.cursorActive = false
               root.cursorIndex = 0
-              itemListFlick.contentY = 0
+              itemList.positionViewAtBeginning()
             }
 
             Keys.priority: Keys.BeforeItem
@@ -905,121 +898,114 @@ Panel {
             }
           }
 
-          Flickable {
-            id: itemListFlick
-            visible: svc.state === "READY"
+          Text {
+            visible: svc.state === "READY" && svc.items.length === 0
             width: parent.width
-            implicitHeight: Math.min(itemListContent.implicitHeight, Style.space(300))
-            height: implicitHeight
-            contentWidth: width
-            contentHeight: itemListContent.implicitHeight
+            topPadding: Style.space(28)
+            bottomPadding: Style.space(28)
+            text: "No login items found" + (String(svc.setting("excludeVaults", "")).trim() !== ""
+              ? "\nSome vaults are excluded in plugin settings." : "")
+            textFormat: Text.PlainText
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+          }
+
+          Text {
+            visible: svc.state === "READY" && svc.items.length > 0 && svc.filteredItems.length === 0
+            width: parent.width
+            topPadding: Style.space(28)
+            bottomPadding: Style.space(28)
+            text: "No matches"
+            textFormat: Text.PlainText
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+            horizontalAlignment: Text.AlignHCenter
+          }
+
+          // One virtualised list. Recent and All used to be two eager Repeaters
+          // over JS arrays: every item in the vault held three Text nodes and a
+          // Repeater of three buttons, and reassigning the filtered array
+          // destroyed and rebuilt all of them. At 4,600 items that is tens of
+          // thousands of objects rebuilt on every keystroke, inside the shell
+          // process every other widget shares, to fill a viewport 300 px tall.
+          // A ListView builds the viewport and a screen of cache either side,
+          // and reuses those delegates instead of rebuilding them.
+          ListView {
+            id: itemList
+            visible: svc.state === "READY" && svc.displayItems.length > 0
+            width: parent.width
+            // Recents first, then the filtered list: one flat model in the
+            // order the keyboard cursor already counts. The two section
+            // headings are drawn by the row that opens each section, because a
+            // plain JS array carries no roles for ListView's own sections.
+            model: svc.displayItems
+            height: Math.min(contentHeight, Style.space(300))
+            spacing: Style.space(4)
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            flickableDirection: Flickable.VerticalFlick
             interactive: contentHeight > height
+            reuseItems: true
+            // A viewport of rows kept warm on each side: enough that arrowing
+            // or flicking never waits for a delegate, bounded so that the size
+            // of the vault cannot decide how much the shell process builds.
+            cacheBuffer: Math.max(1, Math.round(height))
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+            delegate: loginRowDelegate
+          }
+
+          Component {
+            id: loginRowDelegate
 
             Column {
-              id: itemListContent
-              width: itemListFlick.width
+              id: rowSlot
+              required property var modelData
+              required property int index
+              width: itemList.width
               spacing: Style.space(4)
+              readonly property bool startsRecent: svc.displayingRecents && rowSlot.index === 0
+              readonly property bool startsAll: svc.query === "" && svc.items.length > 0
+                && rowSlot.index === svc.recentRows.length
 
-            Text {
-              visible: svc.items.length === 0
-              width: parent.width
-              topPadding: Style.space(28)
-              bottomPadding: Style.space(28)
-              text: "No login items found" + (String(svc.setting("excludeVaults", "")).trim() !== ""
-                ? "\nSome vaults are excluded in plugin settings." : "")
-              textFormat: Text.PlainText
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
-            }
-
-            Text {
-              visible: svc.items.length > 0 && svc.filteredItems.length === 0
-              width: parent.width
-              topPadding: Style.space(28)
-              bottomPadding: Style.space(28)
-              text: "No matches"
-              textFormat: Text.PlainText
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-            }
-
-            PanelSectionHeader {
-              visible: svc.displayingRecents
-              width: parent.width
-              topPadding: Style.space(8)
-              leftPadding: Style.space(10)
-              text: "Recent"
-              textFormat: Text.PlainText
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-            }
-
-            // Each list lives in its own Column so a row can read the offset
-            // its section starts at -- a Repeater reparents delegates to its
-            // own parent, which makes that Column the row's parent.
-            Column {
-              id: recentSection
-              property int rowOffset: 0
-              visible: svc.recentRows.length > 0
-              width: parent.width
-              spacing: Style.space(4)
-
-              Repeater {
-                id: recentRepeater
-                model: svc.recentRows
-                delegate: loginRowDelegate
+              PanelSectionHeader {
+                visible: rowSlot.startsRecent
+                width: parent.width
+                topPadding: Style.space(8)
+                leftPadding: Style.space(10)
+                text: "Recent"
+                textFormat: Text.PlainText
+                foreground: root.foreground
+                fontFamily: root.fontFamily
               }
-            }
 
-            PanelSectionHeader {
-              id: allSectionHeader
-              visible: svc.query === "" && svc.items.length > 0
-              width: parent.width
-              // PanelSectionHeader reserves a sliver above the glyph so a header
-              // sitting at the top of this clipping list is not beheaded. Keep at
-              // least that much when the gap under "Recent" does not apply.
-              topPadding: svc.displayingRecents
-                ? Style.space(8) : Math.ceil(allSectionHeader.fontSize * 0.15)
-              leftPadding: Style.space(10)
-              text: "All"
-              textFormat: Text.PlainText
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-            }
-
-            Column {
-              id: allSection
-              property int rowOffset: svc.recentRows.length
-              visible: svc.allRows.length > 0
-              width: parent.width
-              spacing: Style.space(4)
-
-              Repeater {
-                id: itemRepeater
-                model: svc.allRows
-                delegate: loginRowDelegate
+              PanelSectionHeader {
+                id: allSectionHeader
+                visible: rowSlot.startsAll
+                width: parent.width
+                // PanelSectionHeader reserves a sliver above the glyph so a header
+                // sitting at the top of this clipping list is not beheaded. Keep at
+                // least that much when the gap under "Recent" does not apply.
+                topPadding: svc.displayingRecents
+                  ? Style.space(8) : Math.ceil(allSectionHeader.fontSize * 0.15)
+                leftPadding: Style.space(10)
+                text: "All"
+                textFormat: Text.PlainText
+                foreground: root.foreground
+                fontFamily: root.fontFamily
               }
-            }
 
-              Component {
-                id: loginRowDelegate
-
-                CursorSurface {
+              CursorSurface {
                 id: loginRow
-                required property var modelData
-                required property int index
-                // Derived here rather than baked into the model, so filtering
-                // does not have to rebuild every row to renumber it.
-                readonly property int cursorIndex: loginRow.parent.rowOffset + loginRow.index
+                // The row reads its item off the delegate root, so the bindings
+                // below -- and the plain-text pins over them -- are unchanged by
+                // where the model now lives.
+                readonly property var modelData: rowSlot.modelData
+                // The cursor counts this one flat model, so a row's index is
+                // its cursor index: no per-section offset to keep in step.
+                readonly property int cursorIndex: rowSlot.index
                 width: parent.width
                 implicitHeight: rowContent.implicitHeight + Style.space(14)
                 hasCursor: root.cursorActive && root.cursorIndex === loginRow.cursorIndex
@@ -1106,7 +1092,6 @@ Panel {
                       }
                     }
                   }
-                }
                 }
               }
             }

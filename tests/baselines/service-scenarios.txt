@@ -12,3 +12,6 @@ SCENARIO no-lock state=READY items=1 vaults=1 warnings=0 hasIndex=true refreshin
 SCENARIO missing-cli state=MISSING_DEPS items=0 vaults=0 warnings=0 hasIndex=false refreshing=false stale=false message="Required dependencies are missing"
 SCENARIO auth-before state=READY items=1 vaults=1 warnings=0 hasIndex=true refreshing=false stale=false message="Login items ready"
 SCENARIO auth-during-refresh state=LOCKED items=0 vaults=0 warnings=0 hasIndex=false refreshing=false stale=false message="Session locked"
+SCENARIO close-during-loading indexCalls=1 state=READY items=1 vaults=1 warnings=0 hasIndex=true refreshing=false stale=false message="Login items ready"
+SCENARIO reopen-within-freshness-window indexCalls=1 state=READY items=1 vaults=1 warnings=0 hasIndex=true refreshing=false stale=false message="Login items ready"
+SCENARIO create-refetches indexCalls=2 state=READY items=1 vaults=1 warnings=0 hasIndex=true refreshing=false stale=false message="Login items ready"

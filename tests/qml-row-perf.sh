@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
-# Fills the panel with a synthetic 500-item vault and reports what typing costs
-# and whether the subtitle clock tick throws the delegate list away.
+# Pass/fail gate on what the row list costs at 5,000 items.
 #
-#   tests/qml-row-perf.sh before.txt
-#   git stash && tests/qml-row-perf.sh after.txt && git stash pop
-#   diff before.txt after.txt
+# It fills the real panel with a synthetic 5,000-item vault, types a query into
+# it, and fails unless both of these hold:
 #
-# Timings are wall clock on a live session and will wobble; the number that is
-# a contract rather than a measurement is delegateSurvived.
+#   * the list has instantiated no more than 200 row delegates once it settles.
+#     A list that builds one object per item builds 5,000 rows -- each one three
+#     Text nodes and three buttons -- inside the shared shell process, to fill a
+#     viewport 300 px tall. A virtualised list builds the viewport and its cache
+#     and stops, so the number is bounded by the panel, not by the vault.
+#   * the row objects survive a subtitle clock tick, rather than the tick
+#     rebuilding the whole list.
+#
+# Typing wall clock is printed as well, but it is not the gate: a millisecond
+# figure inside a nested compositor wobbles, a count does not.
+#
+#   tests/qml-row-perf.sh            # pass/fail, prints the measurements
+#   tests/qml-row-perf.sh after.txt  # and keeps them for a diff
 #
 # It runs inside a throwaway nested Hyprland on its own Wayland display. That is
 # not optional: the panel is a layer-shell surface that primes exclusive
@@ -58,7 +67,7 @@ start_nested_display "$sandbox" || exit 1
 out=$(env WAYLAND_DISPLAY="$NESTED_DISPLAY" QT_QPA_PLATFORM=wayland \
   XDG_STATE_HOME="$sandbox/state" \
   OMARCHY_PROTONPASS_HELPER="$sandbox/silent-helper" \
-  timeout 60 qs -p "$sandbox/cfg/harness.qml" 2>&1 || true)
+  timeout 180 qs -p "$sandbox/cfg/harness.qml" 2>&1 || true)
 
 if ! grep -q "HARNESS-DONE" <<<"$out"; then
   echo "FAIL: row perf harness did not complete" >&2
@@ -71,5 +80,16 @@ if grep -q "PERF-SETUP-FAILED" <<<"$out"; then
 fi
 
 # Strip quickshell's log decoration so two runs diff cleanly.
-sed -n 's/^.*DEBUG.*qml.*: \(PERF \)/\1/p' <<<"$out" | sed 's/\x1b\[[0-9;]*m//g' >"$OUT"
-echo "row perf written" >&2
+sed -n 's/^.*DEBUG.*qml.*: \(PERF\)/\1/p' <<<"$out" | sed 's/\x1b\[[0-9;]*m//g' >"$OUT"
+
+verdict=$(sed -n 's/^.*DEBUG.*qml.*: \(PERF-\(PASS\|FAIL\)\)/\1/p' <<<"$out" \
+  | sed 's/\x1b\[[0-9;]*m//g')
+if [[ -z $verdict ]]; then
+  echo "FAIL: row perf harness reached the end without a verdict" >&2
+  exit 1
+fi
+if [[ $verdict == PERF-FAIL* ]]; then
+  echo "FAIL: ${verdict#PERF-FAIL }" >&2
+  exit 1
+fi
+echo "row perf held: ${verdict#PERF-PASS }" >&2
