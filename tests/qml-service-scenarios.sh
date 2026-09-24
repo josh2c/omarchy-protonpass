@@ -57,10 +57,18 @@ fi
 # per invocation by a wrapper that reads it from a file the harness rewrites.
 cat >"$sandbox/helper-wrapper" <<HELPER
 #!/usr/bin/env bash
+printf '%s\\n' "\${1:-}" >>"\$HELPER_LOG"
 scenario=\$(cat "\$SCENARIO_FILE" 2>/dev/null || printf 'ready')
 if [ "\$scenario" = "missing-cli" ]; then
   export PATH="$sandbox/nocli"
 else
+  # slow-items is a healthy vault that answers item list slowly -- the shape a
+  # 4,600-item vault has. The lifecycle cases need a fetch long enough to close
+  # the panel in the middle of.
+  if [ "\$scenario" = "slow-items" ]; then
+    scenario=ready
+    export MOCK_ITEM_SLEEP_SECONDS=4
+  fi
   export MOCK_SCENARIO="\$scenario"
   export PATH="$PWD/tests/mocks:\$PATH_WITHOUT_MOCKS"
 fi
@@ -68,11 +76,13 @@ exec "$PWD/omarchy-protonpass" "\$@"
 HELPER
 chmod +x "$sandbox/helper-wrapper"
 printf 'ready' >"$sandbox/scenario"
+: >"$sandbox/helper.log"
 
 out=$(env QT_QPA_PLATFORM=offscreen \
   XDG_RUNTIME_DIR="$sandbox/rt" XDG_STATE_HOME="$sandbox/state" \
   PATH_WITHOUT_MOCKS="$PATH" \
   SCENARIO_FILE="$sandbox/scenario" \
+  HELPER_LOG="$sandbox/helper.log" \
   OMARCHY_PROTONPASS_HELPER="$sandbox/helper-wrapper" \
   timeout 180 qs -p "$sandbox/cfg/harness.qml" 2>&1 || true)
 
@@ -84,6 +94,20 @@ fi
 if grep -q "UNSETTLED" <<<"$out"; then
   echo "FAIL: a scenario never settled" >&2
   grep "UNSETTLED" <<<"$out" >&2
+  exit 1
+fi
+
+# The lifecycle cases are pass/fail, not just a printed state: closing the panel
+# during a fetch must not throw the fetch away, reopening must not start a
+# second one, and a successful create must fetch even though the index is fresh.
+if grep -q "LIFECYCLE-FAIL" <<<"$out"; then
+  echo "FAIL: index lifecycle case did not hold" >&2
+  grep "LIFECYCLE-FAIL" <<<"$out" >&2
+  exit 1
+fi
+if ! grep -q "SCENARIO close-during-loading " <<<"$out" \
+  || ! grep -q "SCENARIO create-refetches " <<<"$out"; then
+  echo "FAIL: index lifecycle cases did not run" >&2
   exit 1
 fi
 

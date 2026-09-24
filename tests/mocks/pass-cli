@@ -128,6 +128,9 @@ if [[ ${1:-} == vault && ${2:-} == list ]]; then
 fi
 
 if [[ ${1:-} == item && ${2:-} == list ]]; then
+  # A slow item walk with a healthy vault list: the shape a large vault has,
+  # where the panel sits in LOADING for a long time but the fetch does succeed.
+  [[ -n ${MOCK_ITEM_SLEEP_SECONDS:-} ]] && sleep "$MOCK_ITEM_SLEEP_SECONDS"
   share_id=$(arg_value --share-id "$@") || share_id=""
   if [[ -n ${MOCK_FAIL_SHARE_ID:-} && $share_id == "$MOCK_FAIL_SHARE_ID" ]]; then
     printf 'Error: Synthetic per-vault failure\n' >&2

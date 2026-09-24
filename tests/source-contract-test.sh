@@ -56,10 +56,27 @@ assert_contains 'property int _indexGeneration: 0' \
   "index generations are not tracked"
 assert_contains 'if (responseGeneration !== root._indexGeneration)' \
   "stale index responses are not discarded"
-assert_contains $'_indexGeneration++;\n            indexProcess.running = false;' \
-  "closing the panel does not invalidate before stopping an index request"
+# Closing the panel leaves an in-flight index running: on a large vault the
+# fetch costs tens of seconds, and killing it on every close meant it never
+# finished. What still holds is the fencing around it -- an auth transition
+# invalidates and stops the request, and a later refresh supersedes it -- so
+# the pin moved from "close must invalidate" to the two paths that must.
+assert_not_contains 'panelOpen = false;
+        _doctorContinueIndex = false;
+        _indexPending = false;' \
+  "closing the panel still discards an in-flight index request"
+assert_contains $'_indexGeneration++;\n        _indexPending = false;\n        if (indexProcess.running)\n            indexProcess.running = false;' \
+  "an auth transition does not invalidate before stopping an index request"
+assert_contains $'_indexGeneration++;\n        staleWarning = false;' \
+  "an explicit refresh does not supersede the generation in flight"
 [[ $(grep -c '_indexGeneration++' "$ROOT/Service.qml") -ge 2 ]] || \
-  fail "panel close and auth transitions must both invalidate in-flight index metadata"
+  fail "an explicit refresh and an auth transition must both invalidate in-flight index metadata"
+
+# --- The panel open path does not refetch a fresh index -----------------
+assert_contains 'Date.now() - lastSuccessfulIndexAt >= indexFreshnessMs' \
+  "the panel open path does not age the in-memory index"
+assert_contains $'} else {\n            refreshIfStale();\n        }' \
+  "opening the panel still forces a fetch"
 assert_contains $'if (response.state === "logged-out-ok") {\n                root._clearIndex();\n                root.state = "LOGGED_OUT";' \
   "successful logout does not drop the model and enter LOGGED_OUT"
 
