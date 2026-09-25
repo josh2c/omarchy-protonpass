@@ -29,9 +29,11 @@ QML in CI + field registry. Credit cards only after the registry.
 | B10 | Offline test for SIGTERM mid-command (panel close does this routinely; scratch cleanup only reasoned about) | ready to brief | P2 | none | none | none yet |
 | B11 | Product call: should logout delete recents.json? Today per-account IDs survive sign-out | held (Josh) | P2 | none | none | none |
 | B12 | Panel snapshot baseline is theme-dependent (accent colour moved with Josh's theme in B2); pin a theme in the harness | ready to brief | P2 | none | none | none yet |
+| D2 | SECURITY.md recipe 3 prose says "the copy at the bottom passes copy_args" but three wl-copy guard lines follow the value copy; pre-existing imprecision, fix wording in 1.5.2 | ready to brief (docs) | P2 | none | none | none yet |
+| B13 | Live keyboard-driven acceptance: wtype cannot reach the panel on the host seat; the key-matrix harness in the nested compositor is the instrument; record in T12-ACCEPTANCE | ready to brief (docs) | P3 | none | none | none yet |
 | H1 | Delete merged local branches with gone upstreams; remove the eight ~/projects/omarchy-protonpass-t* worktrees | ready (Josh) | P3 | none | none | none |
-| H2 | Update Josh's install from 1.4.0 to current, shell restart | ready (Josh) | P1 | 1.5.1 tag | none | none |
-| REL | 1.5.1: bump, tag, CI by run ID, SECURITY.md greps on fresh clone, marketplace [Verify] issue, Josh's install | ready to dispatch; ships with PRs 7, 1, 4; 5 and 6 go to 1.5.2 | P0 | none | H2 | briefs/release-1.5.1.md |
+| H2 | Josh's install updated to 1.5.1 on main (was t1-repo-scaffold at 1.4.0; that branch still exists in the install, delete it) | done 2026-09-25 | P1 | - | - | - |
+| REL | 1.5.1: bump, tag, CI by run ID, SECURITY.md greps on fresh clone, marketplace [Verify] issue, Josh's install | done 2026-09-25: 094346a, tag 1.5.1, runs 36086210843 + 36086666487 green, marketplace issue omacom/omarchy-plugin-marketplace#8602 open | P0 | - | - | briefs/release-1.5.1.md |
 
 Not doing, on the record: disk index cache as proposed in PR 3 (pending D1);
 raising INDEX_DEADLINE_SECONDS above 90; removing redundant umask calls.
