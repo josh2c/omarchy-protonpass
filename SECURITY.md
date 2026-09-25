@@ -52,6 +52,16 @@ a compromised Omarchy shell; a privileged local attacker who can read another
 process's memory; and physical access to an unlocked session. Nothing here
 defends against those, and no plugin can.
 
+**How the helper and the CLI are found.** The panel runs the helper from the
+plugin directory, and the helper runs `pass-cli` by name, resolved through your
+`PATH` rather than by absolute path. `OMARCHY_PROTONPASS_HELPER` overrides which
+helper the panel runs; the test suite uses it to point the panel at a fixture,
+and it works the same way in a normal session. So anything that can set a
+variable in the Omarchy shell's environment, or plant a `pass-cli` earlier in
+your `PATH`, can choose the code that runs behind this plugin. That is the first
+bullet under Honest limits, stated out loud: code already running as you could
+do this and far more, so this is named rather than defended.
+
 **A note on shared vaults.** `pass-cli` is a trusted channel, but item titles and
 vault names inside a shared vault are authored by whoever can edit it. The index
 path therefore treats that metadata as untrusted input: title and vault-name
@@ -75,7 +85,10 @@ The value never crosses into the panel/UI layer. The panel only ever handles non
 - Never uses `pass-cli --show-secrets`.
 - Never displays a password, TOTP code, or username on screen.
 - Never writes a secret value to any file, log, notification, or command line.
-- Never bundles, patches, or installs Proton software, it points you at the official installer and gets out of the way.
+- Never bundles, patches, or installs Proton software. It names what to install
+  and gets out of the way: on Arch the README points at the community
+  `proton-pass-cli-bin` AUR package, which repackages Proton's release and is
+  maintained by a third party, and elsewhere at Proton's own packages.
 
 ## Honest limits
 
