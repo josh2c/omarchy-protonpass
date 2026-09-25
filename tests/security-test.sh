@@ -190,6 +190,69 @@ if grep -Fq -- "$CREATE_TITLE_MARKER" "$MOCK_CALLS_LOG" ||
   fail "create metadata entered the pass-cli argv log"
 fi
 
+# The state directory is the only place the helper writes anything that
+# outlives a command, so it is the place a disk-persisted index would land.
+# PLAN 1.3 defers such an index and PLAN 3.7 records that item metadata is
+# never at rest; SECURITY.md promises the recents store holds ids and no
+# names. The scan terms are read from the fixtures the mock serves rather
+# than kept by hand, so a fixture change cannot quietly empty the list.
+state_residue_terms=("$MARKER" "$CREATE_TITLE_MARKER" "$CREATE_USERNAME_MARKER")
+while IFS= read -r residue_term; do
+  [[ -n $residue_term ]] || continue
+  state_residue_terms+=("$residue_term")
+done < <(
+  jq -r '.items[].title' "$MOCK_FIXTURES_DIR/item-list.json"
+  jq -r '.vaults[].name' "$MOCK_FIXTURES_DIR/vault-list.json"
+  jq -r '.vaults[].name' "$MOCK_FIXTURES_DIR/vault-list-multiple.json"
+  cat "$MOCK_FIXTURES_DIR/field-output-newline.txt"
+)
+(( ${#state_residue_terms[@]} >= 6 )) ||
+  fail "state residue terms did not load from the mock fixtures"
+
+STATE_FILES_SCANNED=0
+assert_state_dir_clean() {
+  local context=$1 state_file residue_term
+  STATE_FILES_SCANNED=0
+  while IFS= read -r -d '' state_file; do
+    STATE_FILES_SCANNED=$(( STATE_FILES_SCANNED + 1 ))
+    for residue_term in "${state_residue_terms[@]}"; do
+      if regular_file_contains_marker "$state_file" "$residue_term"; then
+        fail "vault data appeared in a state directory file after $context: $state_file"
+      fi
+    done
+  done < <(find "$XDG_STATE_HOME" -type f -print0)
+}
+
+# Vault names and item titles reach the helper only through the index walk, so
+# the walk has to run before the state directory can be judged clean. The
+# multi-vault scenario is used because it carries two vault names.
+index_response=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults '')
+assert_jq '.command == "index" and .state == "ready" and
+  (.items | length) > 0 and (.vaults | length) > 0' "$index_response" \
+  "index walk ran before the state residue scan"
+index_response=""
+unset index_response
+
+# Both the copy and the create above record a recent item, so the store now
+# holds two entries and still nothing but ids and timestamps.
+recents_loaded=$("$HELPER" recents load)
+assert_jq '.command == "recents" and .state == "ok" and
+  (.recents | length) == 2 and
+  ([.recents[].itemId] | sort) == ["item_created_1", "item_fixture_1"] and
+  all(.recents[]; '"$FIXTURE_RECENTS_ENTRY_SHAPE"')' "$recents_loaded" \
+  "recents load returns ids and timestamps only"
+
+assert_state_dir_clean "the copy, create, index and recents paths"
+(( STATE_FILES_SCANNED > 0 )) ||
+  fail "state residue scan found no files to read"
+
+# Clearing removes the recents store. Anything still on disk afterwards
+# outlived the only state the helper admits to keeping.
+recents_cleared=$("$HELPER" recents clear)
+assert_jq '.command == "recents" and .state == "ok" and (has("recents") | not)' \
+  "$recents_cleared" "recents clear removed the store"
+assert_state_dir_clean "clearing the recents store"
+
 while IFS= read -r -d '' sandbox_file; do
   if regular_file_contains_marker "$sandbox_file"; then
     fail "secret marker appeared in a sandbox file"
