@@ -23,7 +23,7 @@ QML in CI + field registry. Credit cards only after the registry.
 | B4 | Surface keybind parse errors and pass-cli version warning in the panel, not only console.warn | idea | P2 | none | none | none yet |
 | B5 | Get the QML harnesses into CI (nested compositor in a container, or assertion suite from baselines) | idea | P1 | none | safe QML work at scale | none yet |
 | B6 | Single field/type registry shared by helper and QML (six duplicated allowlists today) | idea | P2 | B5 preferred | credit cards, notes | none yet |
-| B7 | Credit-card item type: index with --filter-type, copy number/cvv/expiry/name | idea | P3 | B6 | none | none yet |
+| B7 | Credit-card item type | deferred 2026-09-25: not until a user asks and B6 is done | P3 | B6 | none | none |
 | B8 | TOTP selection when an item has several TOTP fields (first one wins today, silently) | idea | P3 | B6 | none | none yet |
 | B9 | Extend security-test residue contract to $XDG_STATE_HOME | done on branch: PR 10 (532aa9b), run 36088531451 green |
 | RV1 | Independent review (Gates 1-2) of PRs 10 and 11, then merge | done 2026-09-25: both pass, merged 47ebec4 (run 36090346954) and 2ae1b35 (run 36090368865) | P1 | none | 1.5.2 | briefs/review-merge-10-11.md |
@@ -31,12 +31,13 @@ QML in CI + field registry. Credit cards only after the registry.
 | B10 | Offline test for SIGTERM mid-command (panel close does this routinely; scratch cleanup only reasoned about) | ready to brief | P2 | none | none | none yet |
 | B11 | Product call: should logout delete recents.json? Today per-account IDs survive sign-out | held (Josh) | P2 | none | none | none |
 | B12 | Panel snapshot baseline is theme-dependent (accent colour moved with Josh's theme in B2); pin a theme in the harness | ready to brief | P2 | none | none | none yet |
+| REL2 | Release 1.5.2 on 2026-10-09: PRs 5 and 6 (merged or landed by fallback), recipe-3 wording, CI concurrency guard, T12 note, release steps | brief ready, dated | P1 | date or PRs 5+6 merged | none | briefs/release-1.5.2.md |
 | D2 | SECURITY.md recipe 3 prose says "the copy at the bottom passes copy_args" but three wl-copy guard lines follow the value copy; pre-existing imprecision, fix wording in 1.5.2 | ready to brief (docs) | P2 | none | none | none yet |
 | B13 | Live keyboard-driven acceptance: wtype cannot reach the panel on the host seat; the key-matrix harness in the nested compositor is the instrument; record in T12-ACCEPTANCE | ready to brief (docs) | P3 | none | none | none yet |
-| B15 | CI concurrency: cancel-in-progress on main cancels a merge commit's only run when merges stack; scope cancellation to PR refs, keep main runs | ready to brief (ci.yml, tiny) | P2 | none | none | none yet |
-| B16 | Test sandbox cleanup does not always fire: 14 stale /tmp/omarchy-protonpass-tests.* dirs after one day; find the path that skips the trap | ready to brief | P2 | none | none | none yet |
+| B15 | CI concurrency guard for main | folded into REL2 | P2 | none | none | none yet |
+| B16 | Test sandbox cleanup does not always fire | folded into H1 | P2 | none | none | none yet |
 | B17 | Residue term list: add a per-source coverage guard so emptying one fixture cannot silently drop its terms | idea | P3 | none | none | none yet |
-| H1 | Delete merged local branches with gone upstreams; remove the eight ~/projects/omarchy-protonpass-t* worktrees | ready (Josh) | P3 | none | none | none |
+| H1 | Hygiene: stale remote branch, dead local branches, eight t* worktrees, install's old branch, stale sandboxes, sandbox-cleanup fix (PR) | ready | P2 | none | none | briefs/hygiene.md |
 | H2 | Josh's install updated to 1.5.1 on main (was t1-repo-scaffold at 1.4.0; that branch still exists in the install, delete it) | done 2026-09-25 | P1 | - | - | - |
 | REL | 1.5.1: bump, tag, CI by run ID, SECURITY.md greps on fresh clone, marketplace [Verify] issue, Josh's install | done 2026-09-25: 094346a, tag 1.5.1, runs 36086210843 + 36086666487 green, marketplace issue omacom/omarchy-plugin-marketplace#8602 open | P0 | - | - | briefs/release-1.5.1.md |
 
