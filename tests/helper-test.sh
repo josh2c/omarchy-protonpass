@@ -276,6 +276,11 @@ runner_timeout_status=$?
 set -e
 assert_eq "124" "$runner_timeout_status" "pass-cli timeout wrapper"
 
+# Sourcing the helper above and calling its internals installed the helper's
+# own EXIT trap in this shell, which replaced the sandbox cleanup. Nothing below
+# calls helper internals again, so re-arm the cleanup here.
+arm_test_sandbox_cleanup
+
 : >"$MOCK_CALLS_LOG"
 multivault_index=$(MOCK_SCENARIO=ready-multivault "$HELPER" index --exclude-vaults '')
 assert_jq '.state == "ready" and (.items|length) == 2 and ([.items[].vaultName]|sort) == ["Personal","Work"] and ([.items[].title]|unique) == ["T0 Synthetic Login"] and .warnings == [] and .vaults == [{shareId:"share_fixture_1",name:"Personal"},{shareId:"share_fixture_2",name:"Work"}]' "$multivault_index" "index multi-vault merge with duplicate titles"
@@ -783,5 +788,9 @@ for logout_row in \
   assert_jq ".schemaVersion == 1 and .command == \"logout\" and .state == \"$logout_state\"" \
     "$logout_matrix" "logout $logout_scenario matrix contract"
 done
+
+# A helper internal called below this point would silently take the EXIT trap
+# again and leak the sandbox, so prove the cleanup is still armed.
+assert_sandbox_cleanup_armed
 
 printf 'helper and mock harness tests passed\n'

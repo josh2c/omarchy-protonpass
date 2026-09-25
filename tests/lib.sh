@@ -8,6 +8,10 @@ source "$TEST_ROOT/tests/fixtures/contracts.sh"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
+  # The EXIT trap can belong to the helper rather than this suite; see
+  # arm_test_sandbox_cleanup. Clean up here so a failing assertion never
+  # depends on which trap is installed.
+  cleanup_test_sandbox
   exit 1
 }
 
@@ -62,7 +66,37 @@ make_test_sandbox() {
 }
 
 cleanup_test_sandbox() {
+  # A suite that sources the helper also gets the helper's scratch-file removal
+  # in this shell. Run it first so re-arming this cleanup does not drop the
+  # helper's own contract. The scratch files live inside the sandbox too, so
+  # this is belt and braces.
+  if [[ $(type -t remove_scratch_files) == function ]]; then
+    remove_scratch_files || true
+    # Blank the two paths the helper reads back in remove_scratch_files. Its
+    # trap can still run after this cleanup, and by then the sandbox it looks
+    # in, including the rm it resolves through PATH, is gone.
+    # shellcheck disable=SC2034
+    STDERR_CAPTURE_FILE=""
+    # shellcheck disable=SC2034
+    INDEX_SCRATCH_FILE=""
+  fi
   if [[ -n ${TEST_SANDBOX:-} && -d $TEST_SANDBOX ]]; then
     rm -rf -- "$TEST_SANDBOX"
   fi
+}
+
+# Bash holds one EXIT trap. The helper installs its own with
+# open_stderr_capture, so a suite that sources the helper and then calls its
+# internals loses the sandbox cleanup silently, and every later exit leaks the
+# sandbox. A suite must re-arm the cleanup after it stops calling helper
+# internals, and assert it is still armed before the suite ends.
+arm_test_sandbox_cleanup() {
+  trap cleanup_test_sandbox EXIT
+}
+
+assert_sandbox_cleanup_armed() {
+  local message=${1:-"sandbox cleanup is not armed at the end of the suite"}
+  local installed
+  installed=$(trap -p EXIT)
+  [[ $installed == *cleanup_test_sandbox* ]] || fail "$message (EXIT trap is: ${installed:-none})"
 }
