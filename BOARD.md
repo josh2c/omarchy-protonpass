@@ -37,7 +37,7 @@ QML in CI + field registry. Credit cards only after the registry.
 | B15 | CI concurrency guard for main | folded into REL2 | P2 | none | none | none yet |
 | B16 | Test sandbox cleanup does not always fire | folded into H1 | P2 | none | none | none yet |
 | B17 | Residue term list: add a per-source coverage guard so emptying one fixture cannot silently drop its terms | idea | P3 | none | none | none yet |
-| H1 | Hygiene: stale remote branch, dead local branches, eight t* worktrees, install's old branch, stale sandboxes, sandbox-cleanup fix (PR) | ready | P2 | none | none | briefs/hygiene.md |
+| H1 | Hygiene | done 2026-09-25: 38 local branches, 8 worktrees, remote release branch, install branch, 14 sandboxes removed; HANDOFF.md preserved on dev-docs 44e4106; sandbox-cleanup fix on PR 12 (cc218b5, run 36096141760 green), review+merge folded into REL2 step 0 | P2 | none | none | briefs/hygiene.md |
 | H2 | Josh's install updated to 1.5.1 on main (was t1-repo-scaffold at 1.4.0; that branch still exists in the install, delete it) | done 2026-09-25 | P1 | - | - | - |
 | REL | 1.5.1: bump, tag, CI by run ID, SECURITY.md greps on fresh clone, marketplace [Verify] issue, Josh's install | done 2026-09-25: 094346a, tag 1.5.1, runs 36086210843 + 36086666487 green, marketplace issue omacom/omarchy-plugin-marketplace#8602 open | P0 | - | - | briefs/release-1.5.1.md |
 

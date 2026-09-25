@@ -87,6 +87,14 @@ helper command × scenario before and after a change; `stress.sh` hunts hangs.
 
 ## Task
 
+0. PR 12 (`sandbox-cleanup`, cc218b5, run 36096141760): tests-only fix for
+   the EXIT trap that `tests/helper-test.sh` loses when it sources the
+   helper. Independent review per PR-PROCESS Gates 1-2: read the diff, redo
+   one mutation of your own (not the author's re-arm deletion), confirm the
+   suites and budget suite pass and the leak of `/tmp/omarchy-protonpass-tests.*`
+   is gone across three runs. If it passes, `gh pr merge 12 --rebase
+   --delete-branch` and confirm the main run green by ID.
+
 1. Contributor PRs. Check PRs 5 and 6 on GitHub.
    - If a PR was amended and its CI is green: review the amendment against
      the request-changes comment on that PR (the coordinator's two points for
