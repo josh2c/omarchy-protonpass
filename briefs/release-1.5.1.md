@@ -83,9 +83,10 @@ helper command × scenario before and after a change; `stress.sh` hunts hangs.
 
 ## Task
 
-Cut release 1.5.1 from `origin/main` once the coordinator confirms which of
-the community PRs are in (PR 7 and PRs 1 and 4 at minimum; 5 and 6 if merged
-by then). Branch `release-1.5.1` in a scratch worktree.
+Cut release 1.5.1 from `origin/main` at 45431fb. It contains PR 7 (issue 2
+fix, two commits), PR 1 (ipcTarget), PR 4 (SECURITY.md wording) and PR 8
+(contributor docs). PRs 5 and 6 are still open and are NOT in this release;
+do not wait for them. Branch `release-1.5.1` in a scratch worktree.
 
 1. Bump `manifest.json` version to 1.5.1. Nothing else in the tree changes
    for the bump; `tests/manifest-test.sh` checks shape, not a pinned value.
