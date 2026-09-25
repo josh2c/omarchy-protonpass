@@ -9,6 +9,7 @@ import "Keybinds.js" as Keybinds
 Panel {
   id: root
   moduleName: "josh2c.protonpass"
+  ipcTarget: "josh2c.protonpass"
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
