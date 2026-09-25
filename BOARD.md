@@ -25,7 +25,7 @@ QML in CI + field registry. Credit cards only after the registry.
 | B6 | Single field/type registry shared by helper and QML (six duplicated allowlists today) | idea | P2 | B5 preferred | credit cards, notes | none yet |
 | B7 | Credit-card item type: index with --filter-type, copy number/cvv/expiry/name | idea | P3 | B6 | none | none yet |
 | B8 | TOTP selection when an item has several TOTP fields (first one wins today, silently) | idea | P3 | B6 | none | none yet |
-| B9 | Extend security-test residue contract to $XDG_STATE_HOME (today only XDG_RUNTIME_DIR is scanned) | ready, briefs/residue-scan.md | P1 | none | any at-rest change | none yet |
+| B9 | Extend security-test residue contract to $XDG_STATE_HOME | done on branch: PR 10 (532aa9b), run 36088531451 green, mutation proven both ways; merge in next ops lane | P1 | none | any at-rest change | none yet |
 | B10 | Offline test for SIGTERM mid-command (panel close does this routinely; scratch cleanup only reasoned about) | ready to brief | P2 | none | none | none yet |
 | B11 | Product call: should logout delete recents.json? Today per-account IDs survive sign-out | held (Josh) | P2 | none | none | none |
 | B12 | Panel snapshot baseline is theme-dependent (accent colour moved with Josh's theme in B2); pin a theme in the harness | ready to brief | P2 | none | none | none yet |
