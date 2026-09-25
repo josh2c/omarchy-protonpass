@@ -19,13 +19,15 @@ QML in CI + field registry. Credit cards only after the registry.
 | D1 | Disk index cache (PR 3): declined for now, in-memory first (B2); revisit only if B2 is not enough. Reviewer's nine findings on PR 3 are the requirements if it ever returns | decided 2026-09-24 | - | none | none | reviewer report, conductor |
 | C1 | Post review comments on PRs 5 and 6, comment on PR 3, approve 1 and 4 | done 2026-09-25 | P0 | none | R1 R2 B1 | scratchpad board/replies.md |
 | C2 | .github/CONTRIBUTING.md and PR template | done, PR 8 merged 45431fb | P1 | none | none | conductor |
-| B3 | Tie the QML budget mirror to the helper constants (Service.qml:33-34 vs helper :24-26) or test that they agree | ready, briefs/budget-mirror.md | P1 | none | any budget change | none yet |
+| B3 | Budget mirror parity test, third CI gate, RECENTS_LIMIT pair | done on branch: PR 11 (03c626c), run 36089010218 green; shape (a) declined, 1.6.0 item | P1 | none | any budget change | none yet |
 | B4 | Surface keybind parse errors and pass-cli version warning in the panel, not only console.warn | idea | P2 | none | none | none yet |
 | B5 | Get the QML harnesses into CI (nested compositor in a container, or assertion suite from baselines) | idea | P1 | none | safe QML work at scale | none yet |
 | B6 | Single field/type registry shared by helper and QML (six duplicated allowlists today) | idea | P2 | B5 preferred | credit cards, notes | none yet |
 | B7 | Credit-card item type: index with --filter-type, copy number/cvv/expiry/name | idea | P3 | B6 | none | none yet |
 | B8 | TOTP selection when an item has several TOTP fields (first one wins today, silently) | idea | P3 | B6 | none | none yet |
-| B9 | Extend security-test residue contract to $XDG_STATE_HOME | done on branch: PR 10 (532aa9b), run 36088531451 green, mutation proven both ways; merge in next ops lane | P1 | none | any at-rest change | none yet |
+| B9 | Extend security-test residue contract to $XDG_STATE_HOME | done on branch: PR 10 (532aa9b), run 36088531451 green |
+| RV1 | Independent review (Gates 1-2) of PRs 10 and 11, then merge | ready | P1 | none | 1.5.2 | briefs/review-merge-10-11.md |
+| B14 | Shape (a): helper emits its limits in the envelope, service validates against them under a fixed ceiling; touches _validatedResponse | idea | P3 | B6 | none | none yet | P1 | none | any at-rest change | none yet |
 | B10 | Offline test for SIGTERM mid-command (panel close does this routinely; scratch cleanup only reasoned about) | ready to brief | P2 | none | none | none yet |
 | B11 | Product call: should logout delete recents.json? Today per-account IDs survive sign-out | held (Josh) | P2 | none | none | none |
 | B12 | Panel snapshot baseline is theme-dependent (accent colour moved with Josh's theme in B2); pin a theme in the harness | ready to brief | P2 | none | none | none yet |
