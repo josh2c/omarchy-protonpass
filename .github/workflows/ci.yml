@@ -102,6 +102,36 @@ jobs:
           fi
           printf 'Budget suite rejected the seeded violation\n'
 
+      # Mutation check: the mirror between the helper's index budget and the
+      # bound Service.qml keeps for itself can only ever agree with the two
+      # files it reads, so it has to be shown to bite. The seed is a budget
+      # raise that stays under every ceiling in budget-test.sh -- a legitimate
+      # change on the helper side alone, which is exactly the drift the mirror
+      # exists to catch and the only gate here that catches it.
+      - name: Seeded budget mirror drift is rejected
+        timeout-minutes: 2
+        id: seeded_mirror_drift
+        continue-on-error: true
+        shell: bash
+        run: |
+          sed -i 's/^readonly INDEX_MAX_ITEMS_TOTAL=.*/readonly INDEX_MAX_ITEMS_TOTAL=20000/' \
+            omarchy-protonpass
+          sudo unshare --net -- tests/source-contract-test.sh
+
+      - name: Assert seeded mirror drift failed
+        timeout-minutes: 2
+        if: always()
+        shell: bash
+        env:
+          SEEDED_OUTCOME: ${{ steps.seeded_mirror_drift.outcome }}
+        run: |
+          git checkout -- omarchy-protonpass
+          if [[ $SEEDED_OUTCOME != failure ]]; then
+            printf 'Source contract suite accepted the seeded mirror drift\n' >&2
+            exit 1
+          fi
+          printf 'Source contract suite rejected the seeded mirror drift\n'
+
       # Mutation check: the security suite itself is part of the security
       # boundary. This step must fail after a secret-retaining QML property is
       # seeded; the following step turns an unexpected pass into a CI failure.

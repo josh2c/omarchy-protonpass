@@ -53,6 +53,45 @@ assert_contains '"clear-now": ["cleared", "not-owner", "error"]' \
 assert_contains 'waitForEnd: true' \
   "process output collectors are not waiting for complete responses"
 
+# --- The bounds the service keeps for itself mirror the helper's ---------
+# Service.qml refuses an index envelope wider than its own bounds before the
+# metadata reaches the model, and the helper refuses to build one wider than
+# its budget. The two bounds stay independent on purpose: the helper is a
+# separate process on PATH, so the shell keeps a bound it owns rather than
+# trusting a file it does not own. Independent is not the same as unrelated.
+# They are one number written twice, and nothing at runtime ties them. Raise
+# the helper alone and it emits a valid envelope that the service then
+# rejects; the user sees the generic error, which is indistinguishable from a
+# real failure. This is the tie. It is static and offline on purpose: the
+# runtime alternative is to let the envelope declare its own bounds, which
+# hands the size of the shell's memory back to the helper.
+readonly_value() {
+  local file=$1 name=$2 value
+  value=$(grep -E "^readonly $name=[0-9]+\$" "$file" | cut -d= -f2)
+  [[ -n $value ]] || fail "could not read $name from $file"
+  printf '%s' "$value"
+}
+service_int_property() {
+  local name=$1 value
+  value=$(grep -E "^ *readonly property int $name: [0-9]+\$" "$ROOT/Service.qml" |
+    sed -E 's/.*: ([0-9]+)$/\1/')
+  [[ -n $value ]] || fail "could not read $name from Service.qml"
+  printf '%s' "$value"
+}
+assert_mirrors() {
+  local helper_name=$1 service_name=$2 helper_value service_value
+  helper_value=$(readonly_value "$ROOT/omarchy-protonpass" "$helper_name")
+  service_value=$(service_int_property "$service_name")
+  [[ $helper_value == "$service_value" ]] || fail \
+    "$service_name is $service_value but $helper_name is $helper_value: move both or neither"
+}
+assert_mirrors INDEX_MAX_ITEMS_TOTAL maxIndexItems
+assert_mirrors INDEX_MAX_VAULTS maxIndexVaults
+# The recents bound is the same pairing without a named property to hold it.
+recents_limit=$(readonly_value "$ROOT/omarchy-protonpass" RECENTS_LIMIT)
+assert_contains "data.recents.length > $recents_limit" \
+  "the recents envelope bound is not RECENTS_LIMIT ($recents_limit)"
+
 # --- Generation fencing over cached metadata ----------------------------
 assert_contains 'property int _indexGeneration: 0' \
   "index generations are not tracked"
