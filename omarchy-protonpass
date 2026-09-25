@@ -187,7 +187,6 @@ open_stderr_capture() {
   fi
   [[ -d $directory && ! -L $directory ]] || return 1
   path=$directory/.omarchy-protonpass.stderr.$$
-  umask 077
   # noclobber creates with O_EXCL, so an existing file or a planted symlink
   # fails the open instead of being written through; mktemp then picks a name
   # nobody can predict.
@@ -195,7 +194,11 @@ open_stderr_capture() {
     noclobber_was_set=true
   fi
   set -o noclobber
-  if : >"$path" 2>/dev/null; then created=true; fi
+  # This file has no later chmod, so the create needs the 0600 a umask gives it.
+  # The umask is scoped to the subshell: set here at the top level it would
+  # outlive this function and change the mode of every file this process — and
+  # the CLI it shells out to — creates afterwards.
+  if ( umask 077; : >"$path" ) 2>/dev/null; then created=true; fi
   if [[ $noclobber_was_set == false ]]; then
     set +o noclobber
   fi
@@ -216,7 +219,8 @@ open_index_scratch() {
     directory=${TMPDIR:-/tmp}
   fi
   [[ -d $directory && ! -L $directory ]] || return 1
-  umask 077
+  # mktemp creates with O_EXCL and mode 0600, so no umask is needed here, and one
+  # set process-wide would outlive this function.
   path=$(mktemp "$directory/.omarchy-protonpass.index.XXXXXX") || return 1
   INDEX_SCRATCH_FILE=$path
   trap remove_scratch_files EXIT
@@ -495,7 +499,7 @@ write_clip_hash() {
   local hash=$1 path temporary
   [[ $hash =~ ^[0-9a-f]{64}$ ]] || return 1
   path=$(clip_hash_path) || return 1
-  umask 077
+  # mktemp writes 0600 and the chmod below pins it, so no umask is needed.
   temporary=$(mktemp "${path}.XXXXXX") || return 1
   if ! printf '%s\n' "$hash" >"$temporary" ||
      ! chmod 600 "$temporary" ||
@@ -550,9 +554,10 @@ write_recents_data() {
   path=$(recents_path) || return 1
   directory=${path%/*}
   [[ ! -L $directory ]] || return 1
-  umask 077
   if [[ ! -d $directory ]]; then
-    mkdir -p -- "$directory" || return 1
+    # Scoped so the directory is never briefly world-readable, without leaving a
+    # umask behind for the rest of the process.
+    ( umask 077; mkdir -p -- "$directory" ) || return 1
     chmod 700 "$directory" || return 1
   fi
   temporary=$(mktemp "$directory/.recents.json.XXXXXX") || return 1

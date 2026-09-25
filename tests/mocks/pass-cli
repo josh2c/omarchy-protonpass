@@ -84,6 +84,12 @@ JSON
 
 record_call "$@"
 
+# Opt-in: the umask this process inherited, so a test can prove the helper does
+# not change it process-wide (see tests/helper-test.sh).
+if [[ -n ${MOCK_UMASK_LOG:-} ]]; then
+  printf '%s\n' "$(umask)" >>"$MOCK_UMASK_LOG"
+fi
+
 if [[ ${MOCK_ASSERT_SAFE_ENV:-0} == 1 ]]; then
   [[ ${PASS_LOG_LEVEL:-} == off && ${MUON_LOG_LEVEL:-} == off ]]
   [[ ${PROTON_PASS_KEY_PROVIDER:-} == fixture-provider ]]

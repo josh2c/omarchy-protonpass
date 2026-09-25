@@ -52,11 +52,14 @@ make_test_sandbox() {
   MOCK_WL_COPY_LOG="$TEST_SANDBOX/wl-copy-calls.jsonl"
   MOCK_WL_PASTE_LOG="$TEST_SANDBOX/wl-paste-calls.jsonl"
   MOCK_FIXTURES_DIR="$TEST_ROOT/tests/fixtures"
+  MOCK_UMASK_LOG="$TEST_SANDBOX/pass-cli-umask.log"
   : >"$MOCK_CALLS_LOG"
   : >"$MOCK_WL_COPY_LOG"
   : >"$MOCK_WL_PASTE_LOG"
+  : >"$MOCK_UMASK_LOG"
 
   export TEST_SANDBOX TEST_BIN MOCK_CALLS_LOG MOCK_WL_COPY_LOG MOCK_WL_PASTE_LOG MOCK_FIXTURES_DIR
+  export MOCK_UMASK_LOG
   export XDG_RUNTIME_DIR XDG_STATE_HOME
   export PATH="$TEST_BIN"
 }
