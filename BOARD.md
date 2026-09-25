@@ -10,12 +10,12 @@ field registry. Credit cards only after the registry.
 | ID | Task | Status | Pri | Depends on | Blocks | Brief |
 |---|---|---|---|---|---|---|
 | G0 | Approve held CI runs on PRs 1, 3, 4, 5, 6 after intake | ready (Josh) | P0 | intake done | R1 R2 R3 | PR-PROCESS.md Gate 0 |
-| R1 | Land PR 1 (ipcTarget) and PR 4 (SECURITY.md wording); reviewed, both correct | ready | P0 | none | 1.5.1 | briefs/pr1-pr4-review.md |
-| R2 | Land PR 5 with two amendments (character set, exclusion on sanitised name); reviewed | ready | P0 | none | 1.5.1 | briefs/pr5-review.md |
-| B1 | PR 6: one umask 077 in main() instead of four per-site calls; hash note as written | ready | P1 | none | 1.5.1 | briefs/pr6-partial.md |
+| R1 | PR 1 live check on pull/1/head (nested compositor + live load + toggle), then Josh approves and squash-merges PRs 1 and 4 in the UI | ready | P0 | G0 | 1.5.1 | briefs/pr1-pr4-review.md (live-check part only) |
+| R2 | PR 5: request changes (character set, exclusion on sanitised name); contributor amends; re-review; merge | waiting on contributor after Josh posts | P0 | G0 | 1.5.1 | replies.md; briefs/pr5-review.md is the fallback if the contributor goes quiet |
+| B1 | PR 6: request changes (one umask 077 in main(), inverted child assertion); contributor amends; merge | waiting on contributor after Josh posts | P1 | G0 | 1.5.1 | replies.md; briefs/pr6-partial.md is the fallback |
 | B2 | Issue 2: finish index after close, freshness window, loading text, ListView rows, perf threshold | done on origin/large-vault-index (f189472, 0d00b84); gates green locally 2026-09-24; awaiting PR for CI | P0 | none | 1.5.1 | briefs/issue2-large-vault.md |
 | D1 | Disk index cache (PR 3): declined for now, in-memory first (B2); revisit only if B2 is not enough. Reviewer's nine findings on PR 3 are the requirements if it ever returns | decided 2026-09-24 | - | none | none | reviewer report, conductor |
-| C1 | Reply to all five contributors and issue 2 | ready (Josh posts) | P0 | D1 | none | conductor drafts |
+| C1 | Post review comments on PRs 5 and 6, comment on PR 3, approve 1 and 4 | ready (Josh posts) | P0 | none | R1 R2 B1 | scratchpad board/replies.md |
 | C2 | .github/CONTRIBUTING.md and PR template | in flight | P1 | none | none | conductor |
 | B3 | Tie the QML budget mirror to the helper constants (Service.qml:33-34 vs helper :24-26) or test that they agree | ready to brief | P1 | none | any budget change | none yet |
 | B4 | Surface keybind parse errors and pass-cli version warning in the panel, not only console.warn | idea | P2 | none | none | none yet |
@@ -34,9 +34,11 @@ field registry. Credit cards only after the registry.
 Not doing, on the record: disk index cache as proposed in PR 3 (pending D1);
 raising INDEX_DEADLINE_SECONDS above 90; removing redundant umask calls.
 
-Parallel lanes now: R1, R2, B1, B2 are four different sessions on four
-disjoint file sets (B1 helper + tests; B2 Service.qml + Panel.qml; R1, R2
-read-only). C2 is docs on `.github/` only.
+Community PRs stay the contributors' vehicle: review comments ask for the
+change, the contributor pushes to their branch, CI runs on approval, merge in
+the UI with them as author. Our own branches (briefs/pr5, pr6) are the
+fallback only if a contributor goes quiet for two weeks; then cherry-pick with
+authorship kept, credit in the body, and close their PR with a link.
 
 Next three lanes after these: B3 (small, helper + Service + one test), B5
 (investigation first: can quickshell run headless in CI?), B6 (design brief
