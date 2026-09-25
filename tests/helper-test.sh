@@ -327,6 +327,29 @@ assert_jq '.vaults == [{shareId:"share_fixture_1",name:("V" * 256)}]' \
   "$oversized_index" "oversized vault name truncated in the vault contract"
 
 : >"$MOCK_CALLS_LOG"
+control_index=$(MOCK_SCENARIO=control-characters "$HELPER" index --exclude-vaults '')
+assert_jq '(.items|length) == 3 and .warnings == []' \
+  "$control_index" "control characters do not hide their own item"
+assert_jq '[.items[] | select(.itemId == "item_escape") | .title] == ["Pay]8;;http://evil.testPal"]' \
+  "$control_index" "terminal escape sequences stripped from titles"
+assert_jq '[.items[] | select(.itemId == "item_bidi") | .title] == ["invoicegnp.exe"]' \
+  "$control_index" "bidirectional overrides stripped from titles"
+assert_jq '[.items[] | select(.itemId == "item_controls") | .title] == ["(untitled login)"]' \
+  "$control_index" "control-only title falls back to a literal"
+assert_jq 'all(.items[]; (.title | test("[[:cntrl:]\u0080-\u009F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]") | not))' \
+  "$control_index" "no index title carries a control or format character"
+
+control_vault_index=$(MOCK_SCENARIO=control-vault-name "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and .vaults == [{shareId:"share_fixture_1",name:"Personal"}]' \
+  "$control_vault_index" "bidirectional overrides stripped from vault names"
+assert_jq 'all(.items[]; .vaultName == "Personal")' \
+  "$control_vault_index" "items carry the sanitised vault name"
+
+control_only_vault_index=$(MOCK_SCENARIO=control-only-vault-name "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and .vaults == [{shareId:"share_fixture_1",name:"(unnamed vault)"}]' \
+  "$control_only_vault_index" "control-only vault name keeps the vault contract"
+
+: >"$MOCK_CALLS_LOG"
 partial_index=$(MOCK_SCENARIO=ready-multivault MOCK_FAIL_SHARE_ID=share_fixture_2 "$HELPER" index --exclude-vaults '')
 assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == ["A vault could not be loaded"] and (.vaults|length) == 2 and (.message|contains("Some vaults"))' "$partial_index" "index partial failure"
 partial_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")

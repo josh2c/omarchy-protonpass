@@ -13,6 +13,14 @@ readonly RECENTS_LIMIT=8
 # Titles and vault names come from whoever shared the vault and are otherwise
 # unbounded, so the index truncates them for display rather than rejecting the
 # item — one hostile entry must not hide the rest of a legitimate vault.
+# They are stripped before they are capped: ESC starts terminal escape
+# sequences, and U+200B-U+200F, U+202A-U+202E, U+2066-U+2069 and U+FEFF are the
+# Unicode bidi and format controls that reorder or hide surrounding text (the
+# "invoice<U+202E>gnp.exe" trick). A shared vault can put any of those in a
+# title, and the panel renders titles as plain text but cannot render around
+# them. Tab and newline survive: they are common in real titles and QML treats
+# them as whitespace, not as structure. Capping happens after stripping, so
+# padding with control characters cannot spend the display budget.
 readonly INDEX_DISPLAY_TEXT_LIMIT=256
 # Resource budget for the index path. Item metadata is authored by whoever can
 # edit a vault, and an accepted shared vault means that is not always the user.
@@ -773,10 +781,17 @@ index_command() {
     return 0
   fi
 
+  # Vault names are sanitised once, here, so both the vault contract below and
+  # every item's vaultName inherit the same cleaned text. A name that is
+  # nothing but control characters would otherwise become an empty string,
+  # which the panel rejects outright (it requires a non-empty vault name and
+  # treats a violation as a failed response), so it falls back to a literal.
   vaults=$(jq -c --arg excluded "$INDEX_EXCLUDE_VAULTS" '
     def trim: sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "");
+    def sanitize: gsub("[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u0080-\u009F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]"; "");
     ($excluded | split(",") | map(trim) | map(select(length > 0))) as $excludedNames
     | [.vaults[] | select(.name as $name | ($excludedNames | index($name) | not))]
+    | map(.name |= (sanitize | if length == 0 then "(unnamed vault)" else . end))
   ' <<<"$vault_stdout")
   vault_total=$(jq 'length' <<<"$vaults")
   if (( vault_total > INDEX_MAX_VAULTS )); then
@@ -845,16 +860,21 @@ index_command() {
     fi
 
     # Two ceilings apply per vault: its own item cap, and whatever remains of
-    # the global one. jq applies both in a single pass.
+    # the global one. jq applies both in a single pass. The sanitizer class is
+    # the same one the vault names go through, and the two copies are one
+    # contract: a character stripped from a vault name and left in a title is
+    # still a character the panel has to draw.
     mapped=$(jq -c --argjson vault "$vault_json" \
       --argjson limit "$INDEX_DISPLAY_TEXT_LIMIT" \
       --argjson perVault "$INDEX_MAX_ITEMS_PER_VAULT" \
-      --argjson remaining "$(( INDEX_MAX_ITEMS_TOTAL - items_total ))" '[
+      --argjson remaining "$(( INDEX_MAX_ITEMS_TOTAL - items_total ))" '
+      def sanitize: gsub("[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u0080-\u009F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]"; "");
+      [
       .items[] | {
         itemId: .id,
         shareId: .share_id,
         vaultName: ($vault.name[0:$limit]),
-        title: (.title[0:$limit]),
+        title: (.title | sanitize | if length == 0 then "(untitled login)" else .[0:$limit] end),
         createTime: .create_time
       }
     ] | .[0:(if $perVault < $remaining then $perVault else $remaining end)]' <<<"$item_stdout")

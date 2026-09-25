@@ -56,7 +56,10 @@ defends against those, and no plugin can.
 vault names inside a shared vault are authored by whoever can edit it. The index
 path therefore treats that metadata as untrusted input: title and vault-name
 length, vault count, item count, response size, and total indexing time are all
-bounded. `tests/budget-test.sh` enforces every one of those bounds against a
+bounded, and control and bidirectional-format characters are stripped from
+titles and vault names before they are displayed, so a row cannot reorder itself
+on screen or carry a terminal escape sequence into whatever draws it.
+`tests/budget-test.sh` enforces every one of those bounds against a
 hostile CLI, and CI fails the build if a bound is raised past a sane ceiling.
 When a limit is reached the panel says so; it never silently drops logins.
 
