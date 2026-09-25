@@ -30,6 +30,11 @@ Item {
     readonly property var filteredItems: filterItems(items, query)
     readonly property bool showRecents: boolSetting("showRecents", true)
     readonly property var recentItems: joinRecents(items, recents)
+    // The helper's INDEX_MAX_ITEMS_TOTAL and INDEX_MAX_VAULTS, written a second
+    // time. The service refuses a wider envelope on its own, so the bound the
+    // shell's memory depends on is not held in a separate process on PATH.
+    // Nothing at runtime ties the two copies. tests/source-contract-test.sh
+    // does, and goes red when one moves without the other.
     readonly property int maxIndexItems: 10000
     readonly property int maxIndexVaults: 100
     // How long an in-memory index may be reused on a panel open before the
