@@ -4,9 +4,10 @@ Maintained by the conductor. One row per task. Status: done / in flight /
 ready (brief exists, not dispatched) / blocked / held / idea. Priority: P0 ships
 before anything else, P1 this release, P2 next, P3 when convenient.
 
-Release plan: 1.5.1 shipped 2026-09-24. 1.5.2 = PRs 5 and 6 (amended
-2026-09-27, in review lane RV2) plus the already-merged budget-mirror and
-residue-scan, plus PR 12. 1.6.0 =
+Release plan: 1.5.1 shipped 2026-09-24. 1.5.2 shipped 2026-09-28 (d67ac33:
+PRs 5, 10, 11, 12, recipe-3 wording, CI concurrency guard). 1.5.3 = PR 6
+once amended + PR 14 sanitizer-mirror + whatever of B10/B12 is ready; no
+date, cut when PR 6 lands or after two quiet weeks. 1.6.0 =
 QML in CI + field registry. Credit cards only after the registry.
 
 | ID | Task | Status | Pri | Depends on | Blocks | Brief |
@@ -14,7 +15,7 @@ QML in CI + field registry. Credit cards only after the registry.
 | G0 | Approve held CI runs on PRs 1, 3, 4, 5, 6 after intake | done 2026-09-25, all green | P0 | - | - | - |
 | R1 | PRs 1 and 4 live-checked on merged main and squash-merged | done 2026-09-25 | P0 | G0 | 1.5.1 | briefs/pr1-pr4-review.md (live-check part only) |
 | R2 | PR 5: request changes (character set, exclusion on sanitised name); contributor amends; re-review; merge | done 2026-09-28, squash-merged 0ed757e, contributor as author | P0 | G0 | 1.5.2 | briefs/review-merge-5-6-12.md |
-| B1 | PR 6: request changes (one umask 077 in main(), inverted child assertion); contributor amends; merge | held at Gate 1 2026-09-28: deleting the main() umask leaves every suite green because helper-test.sh:14 sets umask 077 itself; second request-changes drafted in briefs/pr6-reply.md; lands in 1.5.2 if amended before REL2 step 5, else 1.5.3 | P1 | G0 | 1.5.2 or 1.5.3 | briefs/pr6-reply.md; briefs/pr6-partial.md is the fallback after two quiet weeks |
+| B1 | PR 6: request changes (one umask 077 in main(), inverted child assertion); contributor amends; merge | second request-changes posted 2026-09-28 21:56 (harness umask masks the change; asked for a subshell at umask 022 expecting 0077); waiting on contributor; 1.5.3 | P1 | G0 | 1.5.2 or 1.5.3 | briefs/pr6-reply.md; briefs/pr6-partial.md is the fallback after two quiet weeks |
 | OPS | Merge PR 7, approve fork CI, post reviews on 5 and 6, comment and close 3, live-check and merge 1 and 4, push docs branches | done 2026-09-25: PR 7 rebased (5634ed4, 4d7f305), PR 1 squashed b3a6f8e, PR 4 squashed 490a809, PR 8 docs 45431fb, PR 3 closed with explanation, reviews on 5 and 6 posted | P0 | none | REL | briefs/release-ops-1.md |
 | B2 | Issue 2: finish index after close, freshness window, loading text, ListView rows, perf threshold | done on origin/large-vault-index (f189472, 0d00b84); gates green locally 2026-09-24; PR 7 open, CI run 36081896834 success 2026-09-25; awaiting rebase-and-merge | P0 | none | 1.5.1 | briefs/issue2-large-vault.md |
 | D1 | Disk index cache (PR 3): declined for now, in-memory first (B2); revisit only if B2 is not enough. Reviewer's nine findings on PR 3 are the requirements if it ever returns | decided 2026-09-24 | - | none | none | reviewer report, conductor |
@@ -29,16 +30,19 @@ QML in CI + field registry. Credit cards only after the registry.
 | B9 | Extend security-test residue contract to $XDG_STATE_HOME | done on branch: PR 10 (532aa9b), run 36088531451 green |
 | RV2 | Independent review (Gates 1-3) of PRs 12, 5 and 6 in that order, then merge | done 2026-09-28: PR 12 merged b9f5052 (run 36486225814), PR 5 merged 0ed757e author Nathan Day (run 36487031957), envelope matrix identical, snapshots identical, live load clean; PR 6 held at Gate 1 | P0 | none | REL2 | briefs/review-merge-5-6-12.md |
 | B18 | budget-test.sh is load sensitive: under load the aggregate deadline lands before the per-vault cap and `item truncation was silent` fails on an unmodified tree (contributor report on PR 5, 175s runs) | closed 2026-09-28: not reproduced here at 108s idle, 139s and 257s under load, passed all three; reopen only if it shows on our machine or in CI | P2 | none | none | none yet |
-| B19 | Sanitizer character class is two jq copies in one file; byte-for-byte assert_mirrors in source-contract-test.sh, plus a scenario pinning strip-before-cap and vault-name class coverage | ready 2026-09-28 (RV2 showed both unpinned) | P2 | none | none | briefs/sanitizer-mirror.md |
+| B19 | Sanitizer character class is two jq copies in one file; byte-for-byte assert_mirrors in source-contract-test.sh, plus a scenario pinning strip-before-cap and vault-name class coverage | done on branch 2026-09-28: PR 14 (83b2a53, run 36490813244 green); touches ci.yml (fourth seeded gate) so held out of 1.5.2; review lane RV3 ready | P2 | none | 1.5.3 | briefs/sanitizer-mirror.md |
 | RV1 | Independent review (Gates 1-2) of PRs 10 and 11, then merge | done 2026-09-25: both pass, merged 47ebec4 (run 36090346954) and 2ae1b35 (run 36090368865) | P1 | none | 1.5.2 | briefs/review-merge-10-11.md |
 | B14 | Shape (a): helper emits its limits in the envelope, service validates against them under a fixed ceiling; touches _validatedResponse | idea | P3 | B6 | none | none yet | P1 | none | any at-rest change | none yet |
 | B10 | Offline test for SIGTERM mid-command (panel close does this routinely; scratch cleanup only reasoned about) | ready to brief | P2 | none | none | none yet |
 | B11 | Product call: should logout delete recents.json? Today per-account IDs survive sign-out | held (Josh) | P2 | none | none | none |
 | B12 | Panel snapshot baseline is theme-dependent (accent colour moved with Josh's theme in B2); pin a theme in the harness | ready to brief | P2 | none | none | none yet |
-| REL2 | Release 1.5.2: recipe-3 wording, CI concurrency guard, T12 note, release steps; content = PRs 5, 10, 11, 12 plus B19 and PR 6 if merged before step 5 | ready 2026-09-28, start at step 2 | P1 | none | none | briefs/release-1.5.2.md |
-| D2 | SECURITY.md recipe 3 prose says "the copy at the bottom passes copy_args" but three wl-copy guard lines follow the value copy; pre-existing imprecision, fix wording in 1.5.2 | ready to brief (docs) | P2 | none | none | none yet |
-| B13 | Live keyboard-driven acceptance: wtype cannot reach the panel on the host seat; the key-matrix harness in the nested compositor is the instrument; record in T12-ACCEPTANCE | ready to brief (docs) | P3 | none | none | none yet |
-| B15 | CI concurrency guard for main | folded into REL2 | P2 | none | none | none yet |
+| REL2 | Release 1.5.2 | done 2026-09-28: d67ac33, tag 1.5.2, PR 15 run 36491189783, main run 36492012650, marketplace omacom/omarchy-plugin-marketplace#9196 (baseline flags the install-command strings as package-manager/privilege, maintainer review pending), install on main 1.5.2; PR 13 proved PR-side cancellation (36489962035 cancelled); main-side cancellation correct by construction, unobserved | P1 | - | - | briefs/release-1.5.2.md |
+| RV3 | Independent review (Gates 1-2) of PR 14, then rebase merge; ci.yml gate change reviewed as security | ready 2026-09-28 | P2 | none | 1.5.3 | briefs/review-merge-14.md |
+| M1 | Marketplace: 8602 (1.5.1) superseded by 9196 (1.5.2); close 8602 with a pointer; both wait on maintainer manual review of the copy-install-command strings, 2528 took one day | comment drafted, Josh posts | P2 | none | listing | scratchpad close-8602.md |
+| B20 | Live search/copy is not scriptable on the host seat (IPC exposes open/close/show/hide/toggle only); nested key-matrix + service-scenario harnesses are the instrument; recorded in T12-ACCEPTANCE 350fa0d | done, on record | P3 | - | - | - |
+| D2 | SECURITY.md recipe 3 prose says "the copy at the bottom passes copy_args" but three wl-copy guard lines follow the value copy; pre-existing imprecision, fix wording in 1.5.2 | done in REL2 04b49f7 | P2 | none | none | none yet |
+| B13 | Live keyboard-driven acceptance: wtype cannot reach the panel on the host seat; the key-matrix harness in the nested compositor is the instrument; record in T12-ACCEPTANCE | done in REL2 step 4, dev-docs 350fa0d | P3 | none | none | none yet |
+| B15 | CI concurrency guard for main | done in REL2 f11e9a1 | P2 | none | none | none yet |
 | B16 | Test sandbox cleanup does not always fire | folded into H1 | P2 | none | none | none yet |
 | B17 | Residue term list: add a per-source coverage guard so emptying one fixture cannot silently drop its terms | idea | P3 | none | none | none yet |
 | H1 | Hygiene | done 2026-09-25: 38 local branches, 8 worktrees, remote release branch, install branch, 14 sandboxes removed; HANDOFF.md preserved on dev-docs 44e4106; sandbox-cleanup fix on PR 12 (cc218b5, run 36096141760 green), review+merge folded into REL2 step 0 | P2 | none | none | briefs/hygiene.md |
