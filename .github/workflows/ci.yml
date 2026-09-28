@@ -162,3 +162,4 @@ jobs:
           printf 'Security suite rejected the seeded QML violation\n'
 
 # scratch proof commit A
+# scratch proof commit B
