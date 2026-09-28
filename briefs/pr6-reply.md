@@ -1,0 +1,7 @@
+Thanks for the quick turn. The posture is right and I will merge it as soon as one thing is fixed: the change is not pinned. I deleted `umask 077` from `main()` and the whole suite stayed green, `budget-test.sh` included.
+
+The cause is `tests/helper-test.sh:14`, where the suite sets its own `umask 077`. Both legs of the new child assertion inherit that mask: the sourced-helper leg never runs `main()`, and the `"$HELPER"` subprocess leg inherits the test shell's mask. So the assertion reads the harness, not the helper. The same goes for the pre-existing captured-stderr mode assertion: with the harness mask at 022 it fails whether or not `main()` sets the mask, and at caller umask 022 `open_stderr_capture` yields 644 on this branch (600 on main). It is the only file with no later chmod, which is exactly the window the `main()` mask exists to cover.
+
+Suggested fix: run one copy path from a subshell with a deliberately loose mask, for example `( umask 022; "$HELPER" copy ... )`, and require the mock to report `0077` for those calls. Then the assertion can only pass because `main()` set the mask. Keep the "caller's umask alone" assertion as it is. Please show it red with the `main()` line deleted and green with it present.
+
+Everything else stands: every chmod kept, the four per-site calls gone, and the SECURITY.md paragraph lands as written. The branch still merges cleanly onto main, so no rebase is needed.

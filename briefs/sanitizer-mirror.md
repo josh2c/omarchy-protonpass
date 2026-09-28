@@ -1,20 +1,11 @@
-# Engineer brief: release 1.5.2
-
-Lane RV2 merged PRs 12 and 5 on 2026-09-28; `main` = `origin/main` = 0ed757e.
-Steps 0 and 1 below are done; start at step 2. PR 6 is open with a second
-request for changes: if it has been amended, approved and merged by the time
-you reach step 5, it is in 1.5.2 and the notes credit Nathan Day for it;
-otherwise leave it open and untouched, it goes into 1.5.3. Same for the
-`sanitizer-mirror` PR (lane B19) if it exists: merge it before step 5 only
-if its CI is green by run ID and its diff touches tests only.
+# Build lane: pin the sanitizer class and the strip-before-cap claim
 
 You are the ENGINEER for this task. Do the work directly in this session; do
 not dispatch. You are working on Josh's own machine, which is also his live
 desktop, and you act on the public repository josh2c/omarchy-protonpass with
-Josh's GitHub account through `gh`. Only the public actions named below are
-allowed.
+Josh's GitHub account through `gh`. The only public action allowed is opening
+one pull request.
 
-## The project
 
 `omarchy-protonpass` is a Proton Pass bar-widget plugin for Omarchy Quattro
 (Hyprland + quickshell). Repo: `~/projects/omarchy-protonpass`, `main` =
@@ -90,66 +81,52 @@ helper command × scenario before and after a change; `stress.sh` hunts hangs.
   when your change intentionally alters the snapshot, regenerate and commit
   the baseline and say what moved.
 
+
 ## Task
 
-0. PR 12 (`sandbox-cleanup`, cc218b5, run 36096141760): tests-only fix for
-   the EXIT trap that `tests/helper-test.sh` loses when it sources the
-   helper. Independent review per PR-PROCESS Gates 1-2: read the diff, redo
-   one mutation of your own (not the author's re-arm deletion), confirm the
-   suites and budget suite pass and the leak of `/tmp/omarchy-protonpass-tests.*`
-   is gone across three runs. If it passes, `gh pr merge 12 --rebase
-   --delete-branch` and confirm the main run green by ID.
+PR 5 (merged as 0ed757e, author Nathan Day) strips control and format
+characters from item titles and vault names in `index_command`. The
+independent reviewer found two claims the tests do not hold:
 
-1. Contributor PRs. Check PRs 5 and 6 on GitHub.
-   - If a PR was amended and its CI is green: review the amendment against
-     the request-changes comment on that PR (the coordinator's two points for
-     PR 5; the single-umask posture for PR 6), run the offline suites and the
-     budget suite on its head merged onto main, mutation-check each new
-     assertion once, then `gh pr review <n> --approve` and
-     `gh pr merge <n> --squash`. Confirm the contributor stays the author.
-   - If a PR has no amendment: branch `pr<n>-landed` from `origin/main`,
-     `git fetch origin pull/<n>/head`, cherry-pick the contributor's commits
-     keeping them as author, then add one commit of your own that applies
-     the requested amendments (for PR 5: the extra code points U+061C,
-     U+2060-2064, U+2028/2029, U+00AD, U+E0000-E007F, and excludeVaults
-     matching on the sanitised name, each with a scenario; for PR 6: one
-     `umask 077` at the top of main(), the four per-site calls removed,
-     every chmod kept, the child assertion inverted to expect 0077). Push,
-     open a PR whose body credits the contributor and links their PR, wait
-     for CI by run ID, merge with rebase, then comment on the contributor's
-     PR with the merged commit and close it. Tone: thank them, say exactly
-     what was added on top and why.
-2. SECURITY.md recipe 3: its prose says "the copy at the bottom passes
-   copy_args" but the value copy is followed by three wl-copy guard and
-   clear lines. Reword so the sentence points at the right line and the
-   recipe's output still matches the text. Verify the recipe by running it.
-3. CI concurrency: `.github/workflows/ci.yml` uses one concurrency group
-   with cancel-in-progress for every ref, so two merges to main in quick
-   succession cancel the first merge commit's only run. Scope cancellation
-   so pull-request runs still cancel their predecessors but pushes to main
-   never cancel each other (for example a group keyed on the ref for PRs and
-   on the commit SHA for main). Prove it: push two commits to a scratch
-   branch's PR and see the first cancelled; the main behaviour is proven at
-   release time when the bump and the merge both run.
-4. `dev-docs:T12-ACCEPTANCE.md`: add one line under keyboard chords saying
-   that synthesized input (wtype) does not reach the panel on the host seat
-   and the nested key-matrix harness is the instrument for chord acceptance.
-   Commit on the dev-docs branch and push it (fast-forward only).
-5. Release: same steps as `briefs/release-1.5.1.md` (bump to 1.5.2,
-   SECURITY.md recipes on a fresh clone, full harness set in the nested
-   compositor, live load, release commit with a plain-prose body naming
-   every change and contributor, PR, CI by run ID, rebase merge, annotated
-   unsigned tag, marketplace `[Verify]` issue at the tagged commit, update
-   Josh's install with `omarchy plugin update josh2c.protonpass --yes` after
-   fast-forwarding the local clone, shell restart, confirm 1.5.2 in the bar).
-   Delete the release branch on origin after the merge.
+1. The character class is written twice, as two `def sanitize:` literals in
+   two jq programs in the helper. They are byte-identical today and nothing
+   pins them together: narrowing only the vault-name copy (dropping
+   U+2060-2064 and the tag block) leaves the whole offline suite green,
+   because the property assertion covers `.title` only and the vault-name
+   scenarios pin ESC and U+202E alone.
+2. The helper comment says stripping before capping means control padding
+   cannot spend the display budget. Swapping the cap ahead of the strip
+   leaves the suite green.
+
+Branch `sanitizer-mirror` from `origin/main` in a scratch worktree.
+
+For 1, add an `assert_mirrors`-style check to `tests/source-contract-test.sh`
+that the two `def sanitize:` literals are byte-for-byte equal, following the
+budget-mirror precedent (PR 11). Do not restructure the helper to share the
+class through a shell variable: that changes the shipped runtime for a test
+concern, and the duplication is one contract stated twice, which is the
+shape we chose for the budget numbers. If a fourth CI seeded-mutation gate is
+the right way to prove the new check fails closed, add it the way PR 11 did;
+if you think it is not warranted, say why in the report.
+
+For 2, add a `helper-test.sh` scenario in the pass-cli mock: a title whose
+visible text is followed by more than 256 stripped characters must index as
+its visible text, not as `(untitled login)` or a truncated string. Extend
+the vault-name scenarios so the classes the property assertion covers for
+titles are also represented for vault names.
+
+Acceptance. Each new assertion red under the mutation that motivated it
+(narrow one copy of the class; swap cap and strip) and green on the
+unmodified tree. All offline suites, `budget-test.sh` and ShellCheck green.
+Envelope matrix before and after identical: this lane changes no runtime
+behaviour, and if you find you need to, stop and report. Commit in repo
+style, push, open a PR whose body says what is pinned and why, and report
+the CI run ID. Do not merge.
 
 ## Reporting
 
 Emit the implementation table (feature / part name · % complete · LOE ·
 % certainty · questions to nail down human-AI intent before implementation)
 with the questions column filled before you start, at every stop point, and
-in the final report. Stop at the first failure and report it with the exact
-output; do not improvise on the public repository. The final report lists
-every deletion made, every run ID with its conclusion, the leak checks, and
-the state of the local clone and the live install.
+in the final report. Final report: the two mutations and their results, the
+PR number and run ID, and the state of `~/projects/omarchy-protonpass`.
