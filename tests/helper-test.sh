@@ -332,6 +332,48 @@ assert_jq '.vaults == [{shareId:"share_fixture_1",name:("V" * 256)}]' \
   "$oversized_index" "oversized vault name truncated in the vault contract"
 
 : >"$MOCK_CALLS_LOG"
+control_index=$(MOCK_SCENARIO=control-characters "$HELPER" index --exclude-vaults '')
+assert_jq '(.items|length) == 6 and .warnings == []' \
+  "$control_index" "control characters do not hide their own item"
+assert_jq '[.items[] | select(.itemId == "item_escape") | .title] == ["Pay]8;;http://evil.testPal"]' \
+  "$control_index" "terminal escape sequences stripped from titles"
+assert_jq '[.items[] | select(.itemId == "item_bidi") | .title] == ["invoicegnp.exe"]' \
+  "$control_index" "bidirectional overrides stripped from titles"
+assert_jq '[.items[] | select(.itemId == "item_controls") | .title] == ["(untitled login)"]' \
+  "$control_index" "control-only title falls back to a literal"
+# One title per remaining class: soft hyphen and Arabic letter mark with the
+# word joiner and the invisible operators, the line and paragraph separators, and
+# the tag block (first tag, tag letter, cancel tag).
+assert_jq '[.items[] | select(.itemId == "item_invisible") | .title] == ["Payment"]' \
+  "$control_index" "invisible format characters stripped from titles"
+assert_jq '[.items[] | select(.itemId == "item_separators") | .title] == ["OneTwoThree"]' \
+  "$control_index" "line and paragraph separators stripped from titles"
+assert_jq '[.items[] | select(.itemId == "item_tag_block") | .title] == ["Sneaky"]' \
+  "$control_index" "tag block characters stripped from titles"
+assert_jq 'all(.items[]; (.title | test("[[:cntrl:]\u0080-\u009F\u00AD\u061C\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\\x{E0000}-\\x{E007F}]") | not))' \
+  "$control_index" "no index title carries a control or format character"
+
+control_vault_index=$(MOCK_SCENARIO=control-vault-name "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and .vaults == [{shareId:"share_fixture_1",name:"Personal"}]' \
+  "$control_vault_index" "bidirectional overrides stripped from vault names"
+assert_jq 'all(.items[]; .vaultName == "Personal")' \
+  "$control_vault_index" "items carry the sanitised vault name"
+
+# Exclusion is decided in the sanitised space, so a vault whose real name carries
+# hidden characters is excludable by the name the panel shows — and by the raw
+# name if the user pastes that instead.
+control_vault_excluded=$(MOCK_SCENARIO=control-vault-name "$HELPER" index --exclude-vaults 'Personal')
+assert_jq '.state == "ready" and .items == [] and .warnings == [] and .vaults == []' \
+  "$control_vault_excluded" "vault excluded by its displayed name"
+control_vault_excluded_raw=$(MOCK_SCENARIO=control-vault-name "$HELPER" index --exclude-vaults $'\u202ePersonal\u001b')
+assert_jq '.state == "ready" and .items == [] and .warnings == [] and .vaults == []' \
+  "$control_vault_excluded_raw" "vault excluded by its raw name"
+
+control_only_vault_index=$(MOCK_SCENARIO=control-only-vault-name "$HELPER" index --exclude-vaults '')
+assert_jq '.state == "ready" and .vaults == [{shareId:"share_fixture_1",name:"(unnamed vault)"}]' \
+  "$control_only_vault_index" "control-only vault name keeps the vault contract"
+
+: >"$MOCK_CALLS_LOG"
 partial_index=$(MOCK_SCENARIO=ready-multivault MOCK_FAIL_SHARE_ID=share_fixture_2 "$HELPER" index --exclude-vaults '')
 assert_jq '.state == "ready" and [.items[].vaultName] == ["Personal"] and .warnings == ["A vault could not be loaded"] and (.vaults|length) == 2 and (.message|contains("Some vaults"))' "$partial_index" "index partial failure"
 partial_calls=$(jq -sc '.' "$MOCK_CALLS_LOG")
