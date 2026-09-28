@@ -5,9 +5,10 @@ ready (brief exists, not dispatched) / blocked / held / idea. Priority: P0 ships
 before anything else, P1 this release, P2 next, P3 when convenient.
 
 Release plan: 1.5.1 shipped 2026-09-24. 1.5.2 shipped 2026-09-28 (d67ac33:
-PRs 5, 10, 11, 12, recipe-3 wording, CI concurrency guard). 1.5.3 = PR 6
-once amended + PR 14 sanitizer-mirror + whatever of B10/B12 is ready; no
-date, cut when PR 6 lands or after two quiet weeks. 1.6.0 =
+PRs 5, 10, 11, 12, recipe-3 wording, CI concurrency guard). 1.5.3 = PR 14
+(merged cac36e6) + PR 6 once amended + B21/B22; B10 and B12 wait until PR 6
+lands because they touch the same test files. Cut when PR 6 lands or on
+2026-10-12 after two quiet weeks, whichever first. 1.6.0 =
 QML in CI + field registry. Credit cards only after the registry.
 
 | ID | Task | Status | Pri | Depends on | Blocks | Brief |
@@ -30,15 +31,18 @@ QML in CI + field registry. Credit cards only after the registry.
 | B9 | Extend security-test residue contract to $XDG_STATE_HOME | done on branch: PR 10 (532aa9b), run 36088531451 green |
 | RV2 | Independent review (Gates 1-3) of PRs 12, 5 and 6 in that order, then merge | done 2026-09-28: PR 12 merged b9f5052 (run 36486225814), PR 5 merged 0ed757e author Nathan Day (run 36487031957), envelope matrix identical, snapshots identical, live load clean; PR 6 held at Gate 1 | P0 | none | REL2 | briefs/review-merge-5-6-12.md |
 | B18 | budget-test.sh is load sensitive: under load the aggregate deadline lands before the per-vault cap and `item truncation was silent` fails on an unmodified tree (contributor report on PR 5, 175s runs) | closed 2026-09-28: not reproduced here at 108s idle, 139s and 257s under load, passed all three; reopen only if it shows on our machine or in CI | P2 | none | none | none yet |
-| B19 | Sanitizer character class is two jq copies in one file; byte-for-byte assert_mirrors in source-contract-test.sh, plus a scenario pinning strip-before-cap and vault-name class coverage | done on branch 2026-09-28: PR 14 (83b2a53, run 36490813244 green); touches ci.yml (fourth seeded gate) so held out of 1.5.2; review lane RV3 ready | P2 | none | 1.5.3 | briefs/sanitizer-mirror.md |
+| B19 | Sanitizer character class is two jq copies in one file; byte-for-byte assert_mirrors in source-contract-test.sh, plus a scenario pinning strip-before-cap and vault-name class coverage | done 2026-09-28, merged cac36e6 via RV3 | P2 | none | 1.5.3 | briefs/sanitizer-mirror.md |
 | RV1 | Independent review (Gates 1-2) of PRs 10 and 11, then merge | done 2026-09-25: both pass, merged 47ebec4 (run 36090346954) and 2ae1b35 (run 36090368865) | P1 | none | 1.5.2 | briefs/review-merge-10-11.md |
 | B14 | Shape (a): helper emits its limits in the envelope, service validates against them under a fixed ceiling; touches _validatedResponse | idea | P3 | B6 | none | none yet | P1 | none | any at-rest change | none yet |
 | B10 | Offline test for SIGTERM mid-command (panel close does this routinely; scratch cleanup only reasoned about) | ready to brief | P2 | none | none | none yet |
 | B11 | Product call: should logout delete recents.json? Today per-account IDs survive sign-out | held (Josh) | P2 | none | none | none |
 | B12 | Panel snapshot baseline is theme-dependent (accent colour moved with Josh's theme in B2); pin a theme in the harness | ready to brief | P2 | none | none | none yet |
 | REL2 | Release 1.5.2 | done 2026-09-28: d67ac33, tag 1.5.2, PR 15 run 36491189783, main run 36492012650, marketplace omacom/omarchy-plugin-marketplace#9196 (baseline flags the install-command strings as package-manager/privilege, maintainer review pending), install on main 1.5.2; PR 13 proved PR-side cancellation (36489962035 cancelled); main-side cancellation correct by construction, unobserved | P1 | - | - | briefs/release-1.5.2.md |
-| RV3 | Independent review (Gates 1-2) of PR 14, then rebase merge; ci.yml gate change reviewed as security | ready 2026-09-28 | P2 | none | 1.5.3 | briefs/review-merge-14.md |
-| M1 | Marketplace: 8602 (1.5.1) superseded by 9196 (1.5.2); close 8602 with a pointer; both wait on maintainer manual review of the copy-install-command strings, 2528 took one day | comment drafted, Josh posts | P2 | none | listing | scratchpad close-8602.md |
+| RV3 | Independent review (Gates 1-2) of PR 14, then rebase merge; ci.yml gate change reviewed as security | done 2026-09-28: pass, merged cac36e6, run 36495529759 green; two own mutations red; extractor end-of-line hole found, CI seed 4 is the only catcher for the wrapped shape | P2 | none | 1.5.3 | briefs/review-merge-14.md |
+| M1 | Marketplace: 8602 closed as superseded 2026-09-28; 9196 waits on maintainer manual review of the copy-install-command strings, 2528 took one day | waiting on maintainer | P2 | none | listing | scratchpad close-8602.md |
+| B21 | Sanitizer mirror extractor reads to end of line; wrapping both jq copies identically blinds it; read the whole definition | ready 2026-09-28 | P2 | none | none | briefs/mirror-extractor.md |
+| B22 | Envelope matrix covers no control-* scenario, so its identity says nothing about the sanitizer; add them | ready 2026-09-28, same lane as B21 | P2 | none | none | briefs/mirror-extractor.md |
+| B23 | All four CI seeded gates use continue-on-error, so an unrelated step failure reads as "seed caught"; assert on the suite's own output, not the step outcome | idea | P3 | none | none | none yet |
 | B20 | Live search/copy is not scriptable on the host seat (IPC exposes open/close/show/hide/toggle only); nested key-matrix + service-scenario harnesses are the instrument; recorded in T12-ACCEPTANCE 350fa0d | done, on record | P3 | - | - | - |
 | D2 | SECURITY.md recipe 3 prose says "the copy at the bottom passes copy_args" but three wl-copy guard lines follow the value copy; pre-existing imprecision, fix wording in 1.5.2 | done in REL2 04b49f7 | P2 | none | none | none yet |
 | B13 | Live keyboard-driven acceptance: wtype cannot reach the panel on the host seat; the key-matrix harness in the nested compositor is the instrument; record in T12-ACCEPTANCE | done in REL2 step 4, dev-docs 350fa0d | P3 | none | none | none yet |
