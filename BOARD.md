@@ -4,16 +4,17 @@ Maintained by the conductor. One row per task. Status: done / in flight /
 ready (brief exists, not dispatched) / blocked / held / idea. Priority: P0 ships
 before anything else, P1 this release, P2 next, P3 when convenient.
 
-Release plan: 1.5.1 = large-vault fix + PRs 1 and 4 (cut now). 1.5.2 = PRs 5
-and 6 once the contributors amend, plus budget-mirror and residue-scan. 1.6.0 =
+Release plan: 1.5.1 shipped 2026-09-24. 1.5.2 = PRs 5 and 6 (amended
+2026-09-27, in review lane RV2) plus the already-merged budget-mirror and
+residue-scan, plus PR 12. 1.6.0 =
 QML in CI + field registry. Credit cards only after the registry.
 
 | ID | Task | Status | Pri | Depends on | Blocks | Brief |
 |---|---|---|---|---|---|---|
 | G0 | Approve held CI runs on PRs 1, 3, 4, 5, 6 after intake | done 2026-09-25, all green | P0 | - | - | - |
 | R1 | PRs 1 and 4 live-checked on merged main and squash-merged | done 2026-09-25 | P0 | G0 | 1.5.1 | briefs/pr1-pr4-review.md (live-check part only) |
-| R2 | PR 5: request changes (character set, exclusion on sanitised name); contributor amends; re-review; merge | waiting on contributor after Josh posts | P0 | G0 | 1.5.1 | replies.md; briefs/pr5-review.md is the fallback if the contributor goes quiet |
-| B1 | PR 6: request changes (one umask 077 in main(), inverted child assertion); contributor amends; merge | waiting on contributor after Josh posts | P1 | G0 | 1.5.1 | replies.md; briefs/pr6-partial.md is the fallback |
+| R2 | PR 5: request changes (character set, exclusion on sanitised name); contributor amends; re-review; merge | amended 2026-09-27 (b2f2b8c, e11ab4a), run 36334199355 green; review lane RV2 ready | P0 | G0 | 1.5.2 | briefs/review-merge-5-6-12.md; briefs/pr5-review.md is the fallback |
+| B1 | PR 6: request changes (one umask 077 in main(), inverted child assertion); contributor amends; merge | amended 2026-09-26 (68f49bd), run 36333078219 green; review lane RV2 ready | P1 | G0 | 1.5.2 | briefs/review-merge-5-6-12.md; briefs/pr6-partial.md is the fallback |
 | OPS | Merge PR 7, approve fork CI, post reviews on 5 and 6, comment and close 3, live-check and merge 1 and 4, push docs branches | done 2026-09-25: PR 7 rebased (5634ed4, 4d7f305), PR 1 squashed b3a6f8e, PR 4 squashed 490a809, PR 8 docs 45431fb, PR 3 closed with explanation, reviews on 5 and 6 posted | P0 | none | REL | briefs/release-ops-1.md |
 | B2 | Issue 2: finish index after close, freshness window, loading text, ListView rows, perf threshold | done on origin/large-vault-index (f189472, 0d00b84); gates green locally 2026-09-24; PR 7 open, CI run 36081896834 success 2026-09-25; awaiting rebase-and-merge | P0 | none | 1.5.1 | briefs/issue2-large-vault.md |
 | D1 | Disk index cache (PR 3): declined for now, in-memory first (B2); revisit only if B2 is not enough. Reviewer's nine findings on PR 3 are the requirements if it ever returns | decided 2026-09-24 | - | none | none | reviewer report, conductor |
@@ -26,12 +27,15 @@ QML in CI + field registry. Credit cards only after the registry.
 | B7 | Credit-card item type | deferred 2026-09-25: not until a user asks and B6 is done | P3 | B6 | none | none |
 | B8 | TOTP selection when an item has several TOTP fields (first one wins today, silently) | idea | P3 | B6 | none | none yet |
 | B9 | Extend security-test residue contract to $XDG_STATE_HOME | done on branch: PR 10 (532aa9b), run 36088531451 green |
+| RV2 | Independent review (Gates 1-3) of PRs 12, 5 and 6 in that order, then merge; both contributor branches fork from 1.5.0 and overlap on helper, helper-test.sh, mocks/pass-cli, lib.sh | ready 2026-09-28, takes over REL2 steps 0 and 1 | P0 | none | REL2 | briefs/review-merge-5-6-12.md |
+| B18 | budget-test.sh is load sensitive: under load the aggregate deadline lands before the per-vault cap and `item truncation was silent` fails on an unmodified tree (contributor report on PR 5, 175s runs) | idea, confirm in RV2 | P2 | none | none | none yet |
+| B19 | Sanitizer character class is two jq copies in one file; decide comment vs source-contract assertion (budget-mirror precedent) | idea, RV2 opinion first | P3 | none | none | none yet |
 | RV1 | Independent review (Gates 1-2) of PRs 10 and 11, then merge | done 2026-09-25: both pass, merged 47ebec4 (run 36090346954) and 2ae1b35 (run 36090368865) | P1 | none | 1.5.2 | briefs/review-merge-10-11.md |
 | B14 | Shape (a): helper emits its limits in the envelope, service validates against them under a fixed ceiling; touches _validatedResponse | idea | P3 | B6 | none | none yet | P1 | none | any at-rest change | none yet |
 | B10 | Offline test for SIGTERM mid-command (panel close does this routinely; scratch cleanup only reasoned about) | ready to brief | P2 | none | none | none yet |
 | B11 | Product call: should logout delete recents.json? Today per-account IDs survive sign-out | held (Josh) | P2 | none | none | none |
 | B12 | Panel snapshot baseline is theme-dependent (accent colour moved with Josh's theme in B2); pin a theme in the harness | ready to brief | P2 | none | none | none yet |
-| REL2 | Release 1.5.2 on 2026-10-09: PRs 5 and 6 (merged or landed by fallback), recipe-3 wording, CI concurrency guard, T12 note, release steps | brief ready, dated | P1 | date or PRs 5+6 merged | none | briefs/release-1.5.2.md |
+| REL2 | Release 1.5.2: recipe-3 wording, CI concurrency guard, T12 note, release steps (steps 0 and 1 now in RV2) | brief ready; starts once RV2 merges 5 and 6, no longer date-gated | P1 | RV2 | none | briefs/release-1.5.2.md |
 | D2 | SECURITY.md recipe 3 prose says "the copy at the bottom passes copy_args" but three wl-copy guard lines follow the value copy; pre-existing imprecision, fix wording in 1.5.2 | ready to brief (docs) | P2 | none | none | none yet |
 | B13 | Live keyboard-driven acceptance: wtype cannot reach the panel on the host seat; the key-matrix harness in the nested compositor is the instrument; record in T12-ACCEPTANCE | ready to brief (docs) | P3 | none | none | none yet |
 | B15 | CI concurrency guard for main | folded into REL2 | P2 | none | none | none yet |

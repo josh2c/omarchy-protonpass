@@ -1,7 +1,8 @@
 # Engineer brief: release 1.5.2
 
-Do not start this lane before 2026-10-09 unless the coordinator says both
-PRs 5 and 6 have merged earlier.
+Start this lane only after the coordinator confirms lane RV2
+(`briefs/review-merge-5-6-12.md`) has merged PRs 12, 5 and 6. Steps 0 and 1
+below are done by that lane; skip them and start at step 2.
 
 You are the ENGINEER for this task. Do the work directly in this session; do
 not dispatch. You are working on Josh's own machine, which is also his live
