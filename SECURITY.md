@@ -22,7 +22,9 @@ grep -rnE 'curl|wget|http|nc |socket|XMLHttpRequest' *.qml Keybinds.js omarchy-p
 grep -rn 'show-secrets' .
 
 # Every clipboard copy is marked sensitive so Omarchy's clipboard history skips it.
-# The copy at the bottom passes copy_args, declared as (--sensitive) above it.
+# One line pipes a value: the wl-copy that passes copy_args, declared as
+# (--sensitive) above it. The other hits are availability checks and --clear
+# calls, which never carry a value.
 grep -nE 'wl-copy|--sensitive' omarchy-protonpass
 
 # Sign-in is delegated to the official CLI in a terminal, the plugin never handles it.
