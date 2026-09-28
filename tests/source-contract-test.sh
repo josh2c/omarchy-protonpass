@@ -92,6 +92,26 @@ recents_limit=$(readonly_value "$ROOT/omarchy-protonpass" RECENTS_LIMIT)
 assert_contains "data.recents.length > $recents_limit" \
   "the recents envelope bound is not RECENTS_LIMIT ($recents_limit)"
 
+# --- The two sanitizer classes are one contract written twice ------------
+# index_command strips control and format characters twice: once over vault
+# names as the vault list is read, once over item titles as each vault's items
+# are mapped. Those are two jq programs in two passes, so each carries its own
+# `def sanitize:`. The duplication stays: building the class in a shell variable
+# and interpolating it into both programs would put a runtime seam in the helper
+# for a test's benefit, and the budget numbers above already set the shape for a
+# contract stated twice. But nothing at runtime keeps the copies equal. Drop a
+# class from one of them and the behavioural suites only notice where a mock
+# happens to carry that class on that side; drop one no mock carries, such as
+# the vertical tab, and nothing notices at all. The panel draws a vault name
+# beside every row it draws a title for, so a character worth stripping from a
+# title is worth stripping from a vault name. This is the tie, offline and byte
+# for byte, for the same reason the budget mirror is: move both or neither.
+mapfile -t sanitize_defs < <(grep -oE 'def sanitize: .*$' "$ROOT/omarchy-protonpass")
+(( ${#sanitize_defs[@]} == 2 )) || fail \
+  "the helper defines sanitize ${#sanitize_defs[@]} times, not 2: every copy has to be checked against the others"
+[[ ${sanitize_defs[0]} == "${sanitize_defs[1]}" ]] || fail \
+  "the vault-name and item-title sanitizer classes differ: move both or neither"
+
 # --- Generation fencing over cached metadata ----------------------------
 assert_contains 'property int _indexGeneration: 0' \
   "index generations are not tracked"

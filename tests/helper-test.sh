@@ -333,7 +333,7 @@ assert_jq '.vaults == [{shareId:"share_fixture_1",name:("V" * 256)}]' \
 
 : >"$MOCK_CALLS_LOG"
 control_index=$(MOCK_SCENARIO=control-characters "$HELPER" index --exclude-vaults '')
-assert_jq '(.items|length) == 6 and .warnings == []' \
+assert_jq '(.items|length) == 8 and .warnings == []' \
   "$control_index" "control characters do not hide their own item"
 assert_jq '[.items[] | select(.itemId == "item_escape") | .title] == ["Pay]8;;http://evil.testPal"]' \
   "$control_index" "terminal escape sequences stripped from titles"
@@ -353,11 +353,27 @@ assert_jq '[.items[] | select(.itemId == "item_tag_block") | .title] == ["Sneaky
 assert_jq 'all(.items[]; (.title | test("[[:cntrl:]\u0080-\u009F\u00AD\u061C\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\\x{E0000}-\\x{E007F}]") | not))' \
   "$control_index" "no index title carries a control or format character"
 
+# Stripping runs before the display cap, so control padding cannot spend the
+# display budget. Both titles pad with more stripped characters than the limit:
+# cap first and the leading-padded title is empty at the cap and falls back to
+# the literal, and the split title keeps only the text before its padding.
+assert_jq '[.items[] | select(.itemId == "item_padded_lead") | .title] == ["Payment"]' \
+  "$control_index" "padding ahead of a title cannot push its text past the cap"
+assert_jq '[.items[] | select(.itemId == "item_padded_split") | .title] == ["Payment"]' \
+  "$control_index" "padding inside a title cannot push its tail past the cap"
+
 control_vault_index=$(MOCK_SCENARIO=control-vault-name "$HELPER" index --exclude-vaults '')
 assert_jq '.state == "ready" and .vaults == [{shareId:"share_fixture_1",name:"Personal"}]' \
-  "$control_vault_index" "bidirectional overrides stripped from vault names"
+  "$control_vault_index" "control and format characters stripped from vault names"
 assert_jq 'all(.items[]; .vaultName == "Personal")' \
   "$control_vault_index" "items carry the sanitised vault name"
+# The same property the titles are held to, over both places a vault name is
+# displayed. The vault name goes through its own copy of the sanitizer class, and
+# the panel draws it beside every row, so it has to be held to the same classes.
+assert_jq 'all(.vaults[]; (.name | test("[[:cntrl:]\u0080-\u009F\u00AD\u061C\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\\x{E0000}-\\x{E007F}]") | not))' \
+  "$control_vault_index" "no vault name carries a control or format character"
+assert_jq 'all(.items[]; (.vaultName | test("[[:cntrl:]\u0080-\u009F\u00AD\u061C\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\\x{E0000}-\\x{E007F}]") | not))' \
+  "$control_vault_index" "no item vault name carries a control or format character"
 
 # Exclusion is decided in the sanitised space, so a vault whose real name carries
 # hidden characters is excludable by the name the panel shows — and by the raw
@@ -365,7 +381,8 @@ assert_jq 'all(.items[]; .vaultName == "Personal")' \
 control_vault_excluded=$(MOCK_SCENARIO=control-vault-name "$HELPER" index --exclude-vaults 'Personal')
 assert_jq '.state == "ready" and .items == [] and .warnings == [] and .vaults == []' \
   "$control_vault_excluded" "vault excluded by its displayed name"
-control_vault_excluded_raw=$(MOCK_SCENARIO=control-vault-name "$HELPER" index --exclude-vaults $'\u202ePersonal\u001b')
+control_vault_raw_name=$'\u202e\u0001Per\u001b\u007f\u0085\u00ad\u061c\u200b\u200e\u2028\u2029s\u2060\u2062\u2066\ufeffonal\U000E0041\U000E007F'
+control_vault_excluded_raw=$(MOCK_SCENARIO=control-vault-name "$HELPER" index --exclude-vaults "$control_vault_raw_name")
 assert_jq '.state == "ready" and .items == [] and .warnings == [] and .vaults == []' \
   "$control_vault_excluded_raw" "vault excluded by its raw name"
 

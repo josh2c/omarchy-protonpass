@@ -132,6 +132,37 @@ jobs:
           fi
           printf 'Source contract suite rejected the seeded mirror drift\n'
 
+      # Mutation check: the sanitizer mirror is the same kind of check as the
+      # budget mirror above. It can only ever agree with the one file it reads,
+      # so it has to be shown to bite. The seed drops the vertical tab and the
+      # form feed from the vault-name copy of the class and leaves the item-title
+      # copy alone. No mock title or vault name carries either character, so the
+      # behavioural suites stay green and the mirror is the only check that
+      # catches it -- which is the reason the mirror exists, since the classes a
+      # scenario happens to name are not the classes that can drift.
+      - name: Seeded sanitizer mirror drift is rejected
+        timeout-minutes: 2
+        id: seeded_sanitizer_drift
+        continue-on-error: true
+        shell: bash
+        run: |
+          sed -i '0,/def sanitize:/s/\\u000B\\u000C//' omarchy-protonpass
+          sudo unshare --net -- tests/source-contract-test.sh
+
+      - name: Assert seeded sanitizer drift failed
+        timeout-minutes: 2
+        if: always()
+        shell: bash
+        env:
+          SEEDED_OUTCOME: ${{ steps.seeded_sanitizer_drift.outcome }}
+        run: |
+          git checkout -- omarchy-protonpass
+          if [[ $SEEDED_OUTCOME != failure ]]; then
+            printf 'Source contract suite accepted the seeded sanitizer drift\n' >&2
+            exit 1
+          fi
+          printf 'Source contract suite rejected the seeded sanitizer drift\n'
+
       # Mutation check: the security suite itself is part of the security
       # boundary. This step must fail after a secret-retaining QML property is
       # seeded; the following step turns an unexpected pass into a CI failure.

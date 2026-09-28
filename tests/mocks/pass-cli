@@ -83,7 +83,16 @@ JSON
 }
 
 emit_control_character_items() {
-  cat <<'JSON'
+  # The two padded titles carry more stripped characters than the display limit.
+  # Their visible text only survives if the cap runs after the strip: cap first
+  # and the lead item is nothing but padding, so it falls back to the literal,
+  # while the split item loses everything past its padding.
+  local pad
+  pad=$(jq -rn '"\u200b" * 300')
+  jq -c --arg pad "$pad" '.items += [
+    {id:"item_padded_lead",share_id:"share_fixture_1",vault_id:"vault_fixture_1",state:"Active",flags:[],create_time:"2026-08-20T22:47:06",modify_time:"2026-08-20T22:47:06",title:($pad + "Payment"),item_type:"login"},
+    {id:"item_padded_split",share_id:"share_fixture_1",vault_id:"vault_fixture_1",state:"Active",flags:[],create_time:"2026-08-20T22:47:07",modify_time:"2026-08-20T22:47:07",title:("Pay" + $pad + "ment"),item_type:"login"}
+  ]' <<'JSON'
 {"items":[
   {"id":"item_escape","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:47:00","modify_time":"2026-08-20T22:47:00","title":"Pay\u001b]8;;http://evil.test\u0007Pal","item_type":"login"},
   {"id":"item_bidi","share_id":"share_fixture_1","vault_id":"vault_fixture_1","state":"Active","flags":[],"create_time":"2026-08-20T22:47:01","modify_time":"2026-08-20T22:47:01","title":"invoice\u202egnp.exe","item_type":"login"},
@@ -132,8 +141,12 @@ if [[ ${1:-} == vault && ${2:-} == list ]]; then
     ready-multivault|empty-vault|zero-logins) emit_multivault_vaults ;;
     zero-vaults) jq -cn '{vaults:[]}' ;;
     malformed-vault-entry) jq -cn '{vaults:[{name:"",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
-    control-vault-name) jq -cn '{vaults:[{name:"\u202ePersonal\u001b",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
-    control-only-vault-name) jq -cn '{vaults:[{name:"\u001b\u200b\u2066\uFEFF",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
+    # Both vault names carry one character from every class the sanitizer
+    # strips, so the vault-name copy of the class is exercised as widely as the
+    # item-title copy. The first still reads "Personal" once stripped; the
+    # second is nothing but stripped characters.
+    control-vault-name) jq -cn '{vaults:[{name:"\u202e\u0001Per\u001b\u007f\u0085\u00ad\u061c\u200b\u200e\u2028\u2029s\u2060\u2062\u2066\ufeffonal\udb40\udc41\udb40\udc7f",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
+    control-only-vault-name) jq -cn '{vaults:[{name:"\u0001\u001b\u007f\u0085\u00ad\u061c\u200b\u200e\u2028\u2029\u202e\u2060\u2062\u2066\ufeff\udb40\udc41\udb40\udc7f",vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}' ;;
     oversized-title)
       jq -cn '{vaults:[{name:("V" * 700),vault_id:"vault_fixture_1",share_id:"share_fixture_1"}]}'
       ;;
