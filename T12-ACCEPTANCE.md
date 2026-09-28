@@ -37,6 +37,10 @@ Run on this machine with the real eligible Proton account. This is the single co
 - [ ] The remapped logout chord arms confirmation only; a second invocation within 4 s confirms it
 - [ ] Restore the `keybinds` setting to empty; the documented default chord table works again
 
+Every box above needs a real key press. Synthesized input (`wtype`) does not
+reach the panel on the host seat, so the nested key-matrix harness
+(`tests/qml-key-matrix.sh`) is the instrument for chord acceptance.
+
 ## Clipboard countdown and clear-now
 - [ ] After a copy, the panel shows the textual countdown and progress indicator
 - [ ] Clicking the countdown clears the current plugin-owned value immediately and hides the countdown
