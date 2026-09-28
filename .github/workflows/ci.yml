@@ -8,8 +8,12 @@ on:
 permissions:
   contents: read
 
+# Pull request runs supersede each other: only the newest push to a branch is
+# worth testing. Pushes to main must not, because every merge commit gets one
+# run and that run is the record for that commit -- keying those on the SHA
+# gives each its own group, so a second merge cannot cancel the first.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
