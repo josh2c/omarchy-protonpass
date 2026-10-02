@@ -106,7 +106,87 @@ assert_contains "data.recents.length > $recents_limit" \
 # beside every row it draws a title for, so a character worth stripping from a
 # title is worth stripping from a vault name. This is the tie, offline and byte
 # for byte, for the same reason the budget mirror is: move both or neither.
-mapfile -t sanitize_defs < <(grep -oE 'def sanitize: .*$' "$ROOT/omarchy-protonpass")
+#
+# Each copy is read whole: from `def sanitize:` to the `;` that ends the
+# definition, and not to the end of the line it starts on. End of line was not
+# enough. jq takes the class as one argument of gsub, so both copies can be
+# wrapped after `gsub(` and leave the class on a continuation line -- at which
+# point the two extracts are the same short prefix, this check passes, and the
+# classes underneath it are free to drift apart. One gate noticed that shape
+# before, and for the wrong reason: the seeded sanitizer mutation in CI stopped
+# applying once the class moved off the matched line, so the gate failed on its
+# own seed instead of on the drift. A mirror that reports layout as agreement
+# is not a mirror.
+#
+# The scan stops at the first `;` outside a jq string and outside parentheses,
+# so the `;` that separates gsub's two arguments does not end the definition.
+# A run of whitespace that holds a newline collapses to one space, because a
+# definition may break between tokens and the two copies sit at different
+# indentation; that is layout, not contract. Every other run of spaces is kept
+# byte for byte, so a literal space added to one class and not the other is
+# still a difference.
+sanitize_definitions() {
+  local source=$1 key='def sanitize:' rest definition character run
+  # Written as a code point so ShellCheck does not read the literal as a
+  # mis-escaped quote.
+  local backslash=$'\x5c'
+  local depth in_string index length
+
+  rest=$source
+  while [[ $rest == *"$key"* ]]; do
+    rest=${rest#*"$key"}
+    definition=$key
+    depth=0
+    in_string=0
+    index=0
+    length=${#rest}
+    while (( index < length )); do
+      character=${rest:index:1}
+      case $character in
+        ' ' | $'\t' | $'\n')
+          run=''
+          while (( index < length )); do
+            case ${rest:index:1} in
+              ' ' | $'\t' | $'\n')
+                run+=${rest:index:1}
+                index=$(( index + 1 ))
+                ;;
+              *) break ;;
+            esac
+          done
+          if [[ $run == *$'\n'* ]]; then
+            definition+=' '
+          else
+            definition+=$run
+          fi
+          continue
+          ;;
+      esac
+      if (( in_string )); then
+        if [[ $character == "$backslash" ]]; then
+          definition+=${rest:index:2}
+          index=$(( index + 2 ))
+          continue
+        fi
+        [[ $character == '"' ]] && in_string=0
+      elif [[ $character == '"' ]]; then
+        in_string=1
+      elif [[ $character == '(' ]]; then
+        depth=$(( depth + 1 ))
+      elif [[ $character == ')' ]]; then
+        depth=$(( depth - 1 ))
+      elif [[ $character == ';' ]] && (( depth == 0 )); then
+        definition+=$character
+        break
+      fi
+      definition+=$character
+      index=$(( index + 1 ))
+    done
+    printf '%s\n' "$definition"
+  done
+}
+
+mapfile -t sanitize_defs < <(sanitize_definitions "$HELPER_SOURCE")
 (( ${#sanitize_defs[@]} == 2 )) || fail \
   "the helper defines sanitize ${#sanitize_defs[@]} times, not 2: every copy has to be checked against the others"
 [[ ${sanitize_defs[0]} == "${sanitize_defs[1]}" ]] || fail \
