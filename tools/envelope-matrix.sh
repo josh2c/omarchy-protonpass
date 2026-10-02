@@ -94,8 +94,14 @@ run_helper "clear-now:no-wl-paste" clear-now
 ln -s "$TEST_ROOT/tests/mocks/wl-paste" "$TEST_BIN/wl-paste"
 
 # --- index -----------------------------------------------------------------
+# The control scenarios carry one character from every class the sanitizer
+# strips, on vault names and on item titles, and the padded titles in
+# control-characters carry more stripped characters than the display cap. A
+# matrix without them is byte-identical across a change to the class or to the
+# order the strip and the cap run in, so it reports agreement it did not test.
 for scenario in ready ready-multivault empty-vault zero-logins zero-vaults \
                 malformed-vault-entry malformed-json unicode-titles \
+                control-vault-name control-only-vault-name control-characters \
                 logged-out expired locked offline; do
   scenario_helper "index:$scenario" "$scenario" index --exclude-vaults ''
 done
