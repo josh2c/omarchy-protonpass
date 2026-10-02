@@ -200,7 +200,6 @@ open_stderr_capture() {
   fi
   [[ -d $directory && ! -L $directory ]] || return 1
   path=$directory/.omarchy-protonpass.stderr.$$
-  umask 077
   # noclobber creates with O_EXCL, so an existing file or a planted symlink
   # fails the open instead of being written through; mktemp then picks a name
   # nobody can predict.
@@ -208,6 +207,9 @@ open_stderr_capture() {
     noclobber_was_set=true
   fi
   set -o noclobber
+  # This file has no later chmod, so it needs the 0600 the process-wide mask from
+  # main() gives it. noclobber makes the create O_EXCL, so an existing file or a
+  # planted symlink fails here instead of being written through.
   if : >"$path" 2>/dev/null; then created=true; fi
   if [[ $noclobber_was_set == false ]]; then
     set +o noclobber
@@ -229,7 +231,8 @@ open_index_scratch() {
     directory=${TMPDIR:-/tmp}
   fi
   [[ -d $directory && ! -L $directory ]] || return 1
-  umask 077
+  # mktemp creates with O_EXCL and mode 0600; main()'s mask is the second,
+  # deliberate layer.
   path=$(mktemp "$directory/.omarchy-protonpass.index.XXXXXX") || return 1
   INDEX_SCRATCH_FILE=$path
   trap remove_scratch_files EXIT
@@ -508,7 +511,8 @@ write_clip_hash() {
   local hash=$1 path temporary
   [[ $hash =~ ^[0-9a-f]{64}$ ]] || return 1
   path=$(clip_hash_path) || return 1
-  umask 077
+  # mktemp writes 0600 and the chmod below pins it; main()'s mask covers the
+  # window before the chmod.
   temporary=$(mktemp "${path}.XXXXXX") || return 1
   if ! printf '%s\n' "$hash" >"$temporary" ||
      ! chmod 600 "$temporary" ||
@@ -563,8 +567,8 @@ write_recents_data() {
   path=$(recents_path) || return 1
   directory=${path%/*}
   [[ ! -L $directory ]] || return 1
-  umask 077
   if [[ ! -d $directory ]]; then
+    # main()'s mask keeps the create owner-only until the chmod below pins it.
     mkdir -p -- "$directory" || return 1
     chmod 700 "$directory" || return 1
   fi
@@ -1211,6 +1215,14 @@ logout_command() {
 }
 
 main() {
+  # One deliberate mask for the whole process. Every file this helper writes is
+  # created either by mktemp (0600 by construction) or by a create followed by an
+  # explicit chmod, so this is redundant hygiene on purpose: it also covers the
+  # window before a chmod lands, and the files the pass-cli child creates on this
+  # helper's behalf, which no chmod here can reach. Set once, at the boundary,
+  # instead of at four call sites, so no function has to reason about the mask it
+  # inherited.
+  umask 077
   local command_name
   if (( $# == 0 )); then
     emit_argument_error

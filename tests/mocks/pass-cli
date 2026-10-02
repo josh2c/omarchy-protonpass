@@ -106,6 +106,21 @@ JSON
 
 record_call "$@"
 
+# Opt-in: the umask this process inherited, and the mode of the helper's stderr
+# scratch file when one is up. That file is the single file the helper creates
+# without a later chmod, so its mode is whatever mask the helper process had, and
+# a test can use the pair to prove a child really was handed the mask main() sets
+# (see tests/helper-test.sh).
+if [[ -n ${MOCK_UMASK_LOG:-} ]]; then
+  scratch_mode=absent
+  for scratch_candidate in "${XDG_RUNTIME_DIR:-/nonexistent}"/.omarchy-protonpass.stderr.*; do
+    if [[ -f $scratch_candidate ]]; then
+      scratch_mode=$(stat -c '%a' "$scratch_candidate") || scratch_mode=unknown
+    fi
+  done
+  printf '%s %s\n' "$(umask)" "$scratch_mode" >>"$MOCK_UMASK_LOG"
+fi
+
 if [[ ${MOCK_ASSERT_SAFE_ENV:-0} == 1 ]]; then
   [[ ${PASS_LOG_LEVEL:-} == off && ${MUON_LOG_LEVEL:-} == off ]]
   [[ ${PROTON_PASS_KEY_PROVIDER:-} == fixture-provider ]]
