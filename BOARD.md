@@ -7,8 +7,8 @@ before anything else, P1 this release, P2 next, P3 when convenient.
 Release plan: 1.5.1 shipped 2026-09-24. 1.5.2 shipped 2026-09-28 (d67ac33:
 PRs 5, 10, 11, 12, recipe-3 wording, CI concurrency guard). 1.5.3 = PR 14
 (merged cac36e6) + PR 6 once amended + B21/B22; B10 and B12 wait until PR 6
-lands because they touch the same test files. Cut when PR 6 lands or on
-2026-10-12 after two quiet weeks, whichever first. 1.6.0 =
+lands because they touch the same test files. PR 6 amended 2026-09-29 and in
+review; cut 1.5.3 once RV4 and B21 both land. 1.6.0 =
 QML in CI + field registry. Credit cards only after the registry.
 
 | ID | Task | Status | Pri | Depends on | Blocks | Brief |
@@ -16,7 +16,7 @@ QML in CI + field registry. Credit cards only after the registry.
 | G0 | Approve held CI runs on PRs 1, 3, 4, 5, 6 after intake | done 2026-09-25, all green | P0 | - | - | - |
 | R1 | PRs 1 and 4 live-checked on merged main and squash-merged | done 2026-09-25 | P0 | G0 | 1.5.1 | briefs/pr1-pr4-review.md (live-check part only) |
 | R2 | PR 5: request changes (character set, exclusion on sanitised name); contributor amends; re-review; merge | done 2026-09-28, squash-merged 0ed757e, contributor as author | P0 | G0 | 1.5.2 | briefs/review-merge-5-6-12.md |
-| B1 | PR 6: request changes (one umask 077 in main(), inverted child assertion); contributor amends; merge | second request-changes posted 2026-09-28 21:56 (harness umask masks the change; asked for a subshell at umask 022 expecting 0077); waiting on contributor; 1.5.3 | P1 | G0 | 1.5.2 or 1.5.3 | briefs/pr6-reply.md; briefs/pr6-partial.md is the fallback after two quiet weeks |
+| B1 | PR 6: request changes (one umask 077 in main(), inverted child assertion); contributor amends; merge | amended 2026-09-29 (0bb071f: child from a 0022 subshell, mock records mask + scratch-file mode, expects 0077 600), run 36539781607 green; review lane RV4 ready |  P1 | G0 | 1.5.2 or 1.5.3 | briefs/pr6-reply.md; briefs/pr6-partial.md is the fallback after two quiet weeks |
 | OPS | Merge PR 7, approve fork CI, post reviews on 5 and 6, comment and close 3, live-check and merge 1 and 4, push docs branches | done 2026-09-25: PR 7 rebased (5634ed4, 4d7f305), PR 1 squashed b3a6f8e, PR 4 squashed 490a809, PR 8 docs 45431fb, PR 3 closed with explanation, reviews on 5 and 6 posted | P0 | none | REL | briefs/release-ops-1.md |
 | B2 | Issue 2: finish index after close, freshness window, loading text, ListView rows, perf threshold | done on origin/large-vault-index (f189472, 0d00b84); gates green locally 2026-09-24; PR 7 open, CI run 36081896834 success 2026-09-25; awaiting rebase-and-merge | P0 | none | 1.5.1 | briefs/issue2-large-vault.md |
 | D1 | Disk index cache (PR 3): declined for now, in-memory first (B2); revisit only if B2 is not enough. Reviewer's nine findings on PR 3 are the requirements if it ever returns | decided 2026-09-24 | - | none | none | reviewer report, conductor |
@@ -38,6 +38,7 @@ QML in CI + field registry. Credit cards only after the registry.
 | B11 | Product call: should logout delete recents.json? Today per-account IDs survive sign-out | held (Josh) | P2 | none | none | none |
 | B12 | Panel snapshot baseline is theme-dependent (accent colour moved with Josh's theme in B2); pin a theme in the harness | ready to brief | P2 | none | none | none yet |
 | REL2 | Release 1.5.2 | done 2026-09-28: d67ac33, tag 1.5.2, PR 15 run 36491189783, main run 36492012650, marketplace omacom/omarchy-plugin-marketplace#9196 (baseline flags the install-command strings as package-manager/privilege, maintainer review pending), install on main 1.5.2; PR 13 proved PR-side cancellation (36489962035 cancelled); main-side cancellation correct by construction, unobserved | P1 | - | - | briefs/release-1.5.2.md |
+| RV4 | Independent review (Gates 1-3) of PR 6 third round, then squash merge with contributor as author, live load after | ready 2026-10-01; runs in parallel with B21 (disjoint files) | P1 | none | 1.5.3 | briefs/review-merge-6.md |
 | RV3 | Independent review (Gates 1-2) of PR 14, then rebase merge; ci.yml gate change reviewed as security | done 2026-09-28: pass, merged cac36e6, run 36495529759 green; two own mutations red; extractor end-of-line hole found, CI seed 4 is the only catcher for the wrapped shape | P2 | none | 1.5.3 | briefs/review-merge-14.md |
 | M1 | Marketplace: 8602 closed as superseded 2026-09-28; 9196 waits on maintainer manual review of the copy-install-command strings, 2528 took one day | waiting on maintainer | P2 | none | listing | scratchpad close-8602.md |
 | B21 | Sanitizer mirror extractor reads to end of line; wrapping both jq copies identically blinds it; read the whole definition | ready 2026-09-28 | P2 | none | none | briefs/mirror-extractor.md |
