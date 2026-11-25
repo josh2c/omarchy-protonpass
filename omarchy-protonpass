@@ -844,7 +844,7 @@ index_command() {
     CAPTURE_MAX_BYTES=$INDEX_MAX_RESPONSE_BYTES
     run_pass_cli_captured false item_stdout item_stderr item_status \
       "$vault_timeout" item list \
-      --share-id "$share_id" \
+      "--share-id=$share_id" \
       --filter-type login \
       --filter-state active \
       --output json
@@ -934,7 +934,7 @@ copy_command() {
     username)
       run_pass_cli_captured true val stderr_blob status \
         "$COPY_TIMEOUT_SECONDS" item view \
-        --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field username
+        "--share-id=$COPY_SHARE_ID" "--item-id=$COPY_ITEM_ID" --field username
       if (( status != 0 )); then
         classify_failure copy "$status" "$stderr_blob"
         if [[ $CLASSIFIED_STATE != no-field ]]; then
@@ -946,7 +946,7 @@ copy_command() {
       if (( status != 0 )) || [[ -z $val ]]; then
         run_pass_cli_captured true val stderr_blob status \
           "$COPY_TIMEOUT_SECONDS" item view \
-          --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field email
+          "--share-id=$COPY_SHARE_ID" "--item-id=$COPY_ITEM_ID" --field email
         if (( status != 0 )); then
           fail_classified copy "$status" "$stderr_blob" "No username or email on this item"
           unset val
@@ -964,7 +964,7 @@ copy_command() {
     password)
       run_pass_cli_captured true val stderr_blob status \
         "$COPY_TIMEOUT_SECONDS" item view \
-        --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --field password
+        "--share-id=$COPY_SHARE_ID" "--item-id=$COPY_ITEM_ID" --field password
       if (( status != 0 )); then
         fail_classified copy "$status" "$stderr_blob" "No password on this item"
         unset val
@@ -980,7 +980,7 @@ copy_command() {
     totp)
       run_pass_cli_captured true val stderr_blob status \
         "$COPY_TIMEOUT_SECONDS" item totp \
-        --share-id "$COPY_SHARE_ID" --item-id "$COPY_ITEM_ID" --output json
+        "--share-id=$COPY_SHARE_ID" "--item-id=$COPY_ITEM_ID" --output json
       if (( status != 0 )); then
         fail_classified copy "$status" "$stderr_blob" "No TOTP on this item"
         unset val
@@ -1145,7 +1145,7 @@ create_command() {
 
   run_pass_cli_captured false stdout stderr_blob status \
     "$CREATE_TIMEOUT_SECONDS" item create login \
-    --share-id "$CREATE_SHARE_ID" --from-template - < <(
+    "--share-id=$CREATE_SHARE_ID" --from-template - < <(
       jq -c --rawfile generatedPassword "/dev/fd/$password_read" '
         {
           title: .title,
